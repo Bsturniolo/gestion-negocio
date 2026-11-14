@@ -138,25 +138,40 @@ function perForm(p) {
 }
 function turRapido() {
   const ppl = activos(); if (!ppl.length) { ui.turTab = 'personal'; render(); return toast('Primero agregá al personal'); }
-  const iv = (diaDoc(ui.turFecha) || {}).intervalo || turCfg().intervalo;
-  const horas = []; for (let m = 0; m <= 24 * 60; m += iv) horas.push(m);
+  const horas = []; for (let m = 0; m <= 24 * 60; m += 30) horas.push(m);
   const opt = (sel) => horas.map((m) => `<option value="${m}" ${m === sel ? 'selected' : ''}>${hhmm(m)}</option>`).join('');
-  openModal(`<h3>Cargar turno</h3><div class="form">
-    <label class="f full">Persona<select name="pid">${ppl.map((p) => `<option value="${p.id}">${esc(p.nombre)}</option>`).join('')}</select></label>
-    <label class="f">Desde<select name="desde">${opt(8 * 60)}</select></label>
-    <label class="f">Hasta<select name="hasta">${opt(14 * 60)}</select></label>
-    <div class="full"><div class="small muted" style="margin-bottom:6px">Días</div><div class="row">${semana(ui.turFecha).map((f, i) => `<label class="btn" style="gap:6px"><input type="checkbox" name="d${i}" ${f === ui.turFecha ? 'checked' : ''} style="width:auto"> ${DIAS[i].slice(0, 3)} ${parseD(f).getDate()}</label>`).join('')}</div></div>
-  </div><div class="modal-actions"><button data-act="close">Cancelar</button><button class="pri" id="trOk">Cargar</button></div>`, (box) => {
+  const pid0 = ppl.some((p) => p.id === ui.pincel) ? ui.pincel : ppl[0].id;
+  openModal(`<h3>Cargar turno</h3><p class="small muted" style="margin-top:0">Se dibuja solo en la planilla. No hace falta tocar el calendario.</p><div class="form">
+    <div class="full"><div class="small muted" style="margin-bottom:6px">Persona</div><div class="paleta" id="trPpl">${ppl.map((p) => `<button type="button" class="pin${p.id === pid0 ? ' sel' : ''}" data-p="${p.id}" style="background:${p.color};color:${textoSobre(p.color)}">${esc(p.nombre.toUpperCase())}</button>`).join('')}</div></div>
+    <label class="f">Día<input type="date" name="fecha" id="trFecha" value="${ui.turFecha}"></label>
+    <div></div>
+    <label class="f">Entró a las<select name="desde">${opt(8 * 60)}</select></label>
+    <label class="f">Se fue a las<select name="hasta">${opt(16 * 60)}</select></label>
+    <div class="full"><div class="small muted" style="margin-bottom:6px">Repetir el mismo horario otros días de esa semana (opcional)</div><div class="row" id="trDias"></div></div>
+  </div><p class="small" id="trInfo"></p><div class="modal-actions"><button data-act="close">Cancelar</button><button class="pri" id="trOk">Cargar turno</button></div>`, (box) => {
+    let pid = pid0;
+    const info = () => { const a = Number($('[name=desde]', box).value), b = Number($('[name=hasta]', box).value), p = persona(pid); $('#trInfo', box).innerHTML = b > a ? `${esc(p.nombre)}: de ${hhmm(a)} a ${hhmm(b)} = <b>${fmtH((b - a) / 60)}</b>` : '<span class="c-out">La salida tiene que ser después de la entrada.</span>'; };
+    const dias = () => { const f = $('#trFecha', box).value || ui.turFecha; $('#trDias', box).innerHTML = semana(f).map((x, i) => (x === f ? '' : `<label class="btn" style="gap:6px"><input type="checkbox" data-d="${x}" style="width:auto"> ${DIAS[i].slice(0, 3)} ${parseD(x).getDate()}</label>`)).join(''); };
+    $('#trPpl', box).onclick = (e) => { const b = e.target.closest('.pin'); if (!b) return; pid = b.dataset.p; $$('#trPpl .pin', box).forEach((x) => x.classList.toggle('sel', x === b)); info(); };
+    $('#trFecha', box).onchange = dias; $('[name=desde]', box).onchange = info; $('[name=hasta]', box).onchange = info; dias(); info();
     $('#trOk', box).onclick = () => {
-      const v = vals(box), a = Number(v.desde), b = Number(v.hasta); if (b <= a) return toast('"Hasta" tiene que ser después de "Desde"');
-      const dias = semana(ui.turFecha).filter((f, i) => v['d' + i]); if (!dias.length) return toast('Elegí al menos un día');
-      dias.forEach((f) => agregarTurno(f, v.pid, a, b));
-      closeModal(); commit(); toast(`Turno cargado en ${dias.length} día${dias.length > 1 ? 's' : ''} ✔`);
+      const v = vals(box), a = Number(v.desde), b = Number(v.hasta); if (b <= a) return toast('La salida tiene que ser después de la entrada');
+      const f = v.fecha || ui.turFecha, lista = [f, ...$$('#trDias input:checked', box).map((x) => x.dataset.d)];
+      lista.forEach((x) => agregarTurno(x, pid, a, b));
+      ui.turFecha = f; closeModal(); commit(); toast(`Turno cargado: ${persona(pid).nombre} ${hhmm(a)} a ${hhmm(b)}${lista.length > 1 ? ` en ${lista.length} días` : ''} ✔`);
     };
   });
 }
+function aMediaHora(d) { // pasa un día de casilleros de 1 hora a casilleros de media hora, sin perder nada
+  if ((d.intervalo || 60) <= 30) return;
+  const iv = d.intervalo || 60, nuevo = {};
+  for (const [k, v] of Object.entries(d.slots || {})) { const [l, m] = k.split('_').map(Number); for (let x = m; x < m + iv; x += 30) nuevo[`${l}_${x}`] = v; }
+  d.slots = nuevo; d.intervalo = 30;
+}
 function agregarTurno(f, pid, a, b) { // pone a la persona en la primera columna libre de ese horario
-  const d = ensureDia(f), s = d.intervalo || 60, mins = []; for (let m = Math.floor(a / s) * s; m < b; m += s) mins.push(m);
+  const d = ensureDia(f);
+  if (a % (d.intervalo || 60) || b % (d.intervalo || 60)) aMediaHora(d);
+  const s = d.intervalo || 60, mins = []; for (let m = Math.floor(a / s) * s; m < b; m += s) mins.push(m);
   let lane = 0; while (lane < 40 && !mins.every((m) => !d.slots[`${lane}_${m}`] || d.slots[`${lane}_${m}`] === pid)) lane++;
   mins.forEach((m) => (d.slots[`${lane}_${m}`] = pid)); d.carriles = Math.max(d.carriles || 0, lane + 1); derivar(d);
 }
@@ -215,7 +230,7 @@ const enCelda = (d, pid, m) => { if (!d) return false; const a = (d.celdas || {}
 const rango = (arr, iv) => { // [[ini, fin], ...] de bloques contiguos
   const s = arr.slice().sort((a, b) => a - b), out = []; for (const m of s) { const u = out[out.length - 1]; if (u && u[1] === m) u[1] = m + iv; else out.push([m, m + iv]); } return out;
 };
-const hcorta = (m) => (m % 60 ? hhmm(m) : String(m / 60));
+const hcorta = (m) => (m % 60 ? Math.floor(m / 60) + ':' + String(m % 60).padStart(2, '0') : String(m / 60));
 
 function paleta() {
   const ppl = activos();
@@ -234,7 +249,7 @@ function tCal() {
   return `<div class="card no-print cal-barra" style="margin-bottom:10px"><div class="spread">
     <div class="tabs" style="margin:0">${vistas.map(([k, l]) => `<button class="${v === k ? 'on' : ''}" data-act="calVista" data-id="${k}">${l}</button>`).join('')}</div>
     <div class="row"><button data-act="calMov" data-id="-1">◀</button><b>${per.nombre}</b><button data-act="calMov" data-id="1">▶</button><button class="sm" data-act="turHoy">Hoy</button></div>
-    <div class="row">${v === 'dia' || v === 'semana' ? `<button class="sm" data-act="turRapido">➕ Turno de … a …</button><button class="sm" data-act="${v === 'dia' ? 'turCopiar' : 'turCopiarSem'}" ${v === 'dia' ? 'data-id="-7"' : ''}>Copiar ${v === 'dia' ? 'de la semana pasada' : 'semana anterior'}</button>` : ''}<button class="sm" data-act="turPrint">🖨 Imprimir</button>${editable ? `<label class="small row" style="gap:6px"><input type="checkbox" data-act="turPintarTog" ${ui.turPintar ? 'checked' : ''} style="width:auto"> Pintar</label>` : ''}</div></div>
+    <div class="row"><button class="pri sm" data-act="turRapido">➕ Cargar turno</button>${v === 'dia' || v === 'semana' ? `<button class="sm" data-act="${v === 'dia' ? 'turCopiar' : 'turCopiarSem'}" ${v === 'dia' ? 'data-id="-7"' : ''}>Copiar ${v === 'dia' ? 'de la semana pasada' : 'semana anterior'}</button>` : ''}<button class="sm" data-act="turPrint">🖨 Imprimir</button>${editable ? `<label class="small row" style="gap:6px"><input type="checkbox" data-act="turPintarTog" ${ui.turPintar ? 'checked' : ''} style="width:auto"> Pintar</label>` : ''}</div></div>
     ${editable ? `<div class="mt">${paleta()}</div><p class="small muted" style="margin:6px 0 0">Elegí a la persona arriba y tocá o arrastrá sobre cualquier cuadrado para ponerla ahí. Tocá un cuadrado que ya es suyo para sacarlo. Tocá la banda amarilla para escribir una nota del día.</p>` : '<p class="small muted" style="margin:8px 0 0">Tocá un día para abrirlo y editarlo.</p>'}</div>
   <div class="print-title">${esc(state.config.negocio)} · Turnos · ${per.nombre}</div>
   ${cuerpo}
@@ -243,9 +258,9 @@ function tCal() {
 
 // Planilla de uno o varios días: banda amarilla con número y nota, nombre del día, columnas libres por día
 function xlsGrid(dias, grande) {
-  const c = turCfg(), iv = c.intervalo;
+  const c = turCfg(), docs = dias.map(diaDoc), sl = docs.map(slotsDia);
+  const iv = Math.min(c.intervalo, ...docs.filter(Boolean).map((d) => d.intervalo || 60));
   let ini = c.inicio * 60, fin = c.fin * 60;
-  const docs = dias.map(diaDoc), sl = docs.map(slotsDia);
   sl.forEach((S, i) => Object.keys(S).forEach((k) => { const m = Number(k.split('_')[1]); ini = Math.min(ini, m); fin = Math.max(fin, m + ((docs[i] && docs[i].intervalo) || iv)); }));
   ini = Math.floor(ini / iv) * iv; const filas = []; for (let m = ini; m < fin; m += iv) filas.push(m);
   const lanes = dias.map((f, i) => { let n = Math.max((docs[i] && docs[i].carriles) || 0, c.columnas); Object.keys(sl[i]).forEach((k) => (n = Math.max(n, Number(k.split('_')[0]) + 1))); return n; });
