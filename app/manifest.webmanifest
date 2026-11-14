@@ -1,0 +1,17 @@
+{
+  "name": "Gestión del Negocio",
+  "short_name": "Negocio",
+  "description": "Stock, proveedores, finanzas y calendario de deudas",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4f6f5",
+  "theme_color": "#1f6f5c",
+  "lang": "es-AR",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

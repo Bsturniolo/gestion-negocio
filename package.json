@@ -1,0 +1,64 @@
+{
+  "name": "gestion-negocio",
+  "version": "1.0.0",
+  "description": "Stock, proveedores, finanzas y calendario",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:cloud": "esbuild src/cloud.js --bundle --minify --format=iife --target=es2020 --outfile=app/cloud.js",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux"
+  },
+  "keywords": [],
+  "author": "Bautista",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^38.2.0",
+    "electron-builder": "^26.0.12"
+  },
+  "dependencies": {
+    "esbuild": "^0.25.10",
+    "firebase": "^11.10.0"
+  },
+  "productName": "Gestion del Negocio",
+  "build": {
+    "appId": "ar.gestion.negocio",
+    "productName": "Gestion del Negocio",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "app/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Gestión del Negocio",
+      "artifactName": "Gestion-del-Negocio-Instalador-${version}.exe",
+      "language": "3082"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Office",
+      "icon": "build/icon.png"
+    },
+    "publish": null
+  }
+}
