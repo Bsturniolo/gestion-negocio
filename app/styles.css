@@ -239,3 +239,71 @@ tr.clic{cursor:pointer}tr.clic:hover td{background:#f6faf8}
   #catPrintArea th,#catPrintArea td{border-bottom:1px solid #ccc;padding:6px}
   #catPrintArea .num{text-align:right}
 }
+
+/* ===== Celular ===== */
+.solo-m{display:none}
+.nav-mas{display:none!important}
+.mas-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.mas-it{flex-direction:column;justify-content:center;gap:6px;padding:18px 8px;font-size:15px;font-weight:600;border-radius:14px;min-height:96px}
+.mas-it span{font-size:28px}
+.mes-cel{width:100%;table-layout:fixed;border-collapse:collapse;background:#fff;border:1px solid var(--line)}
+.mes-cel th{text-align:center;padding:6px 0;font-size:12px;background:#fafbfb}
+.mes-cel td{vertical-align:top;border:1px solid var(--line);padding:3px;height:64px;cursor:pointer}
+.mes-cel td.mc-vacio{background:#f6f7f7;cursor:default}
+.mes-cel td.hoy .mc-num{background:var(--pri);color:#fff;border-radius:99px;display:inline-block;padding:0 6px}
+.mc-num{font-weight:800;font-size:13px;margin-bottom:2px}
+.mc-chip{font-size:9.5px;font-weight:700;border-radius:4px;padding:1px 2px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.res-cards{display:grid;gap:8px}
+.res-card{padding:12px}
+@media (max-width:760px){
+  .solo-m{display:block}
+  span.solo-m{display:inline}
+  .solo-d{display:none!important}
+  #nav{justify-content:space-around;overflow-x:visible}
+  #nav a.nav-sec{display:none}
+  #nav .nav-mas{display:flex!important}
+  #nav a{flex:1 1 0;min-width:0;font-size:11px;padding:7px 2px}
+  #nav .ico{font-size:21px}
+  button,.btn{min-height:42px}
+  button.sm{min-height:36px;padding:6px 11px}
+  input,select,textarea{font-size:16px;min-height:44px}
+  textarea{min-height:80px}
+  #main{padding:14px 12px 96px}
+  .sub{font-size:14px;margin-bottom:10px}
+  h2{font-size:17px}
+  /* selector de local y pestañas: una sola fila que se desliza */
+  .locales,.tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;margin-left:-12px;margin-right:-12px;padding:2px 12px}
+  .locales::-webkit-scrollbar,.tabs::-webkit-scrollbar{display:none}
+  .locales>*,.tabs>*{flex-shrink:0}
+  .locales>.small{display:none}
+  .loc{padding:6px 12px;min-height:38px}
+  .tabs button{padding:8px 13px}
+  #main>.spread{gap:8px}
+  #main>.spread>.row{width:100%}
+  #main>.spread>.row>button{flex:1 1 auto;justify-content:center}
+  .acciones{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .acciones button{justify-content:center;padding:10px 6px;font-size:14px}
+  /* productos en dos columnas */
+  .prods{grid-template-columns:1fr 1fr;gap:8px}
+  .prod .ph{aspect-ratio:16/10;font-size:30px}
+  .prod .bd{padding:8px 10px}
+  .prod .nm{font-size:14px}
+  /* barra del calendario de turnos compacta */
+  .cal-barra{padding:10px}
+  .cal-barra>.spread{gap:8px}
+  .cal-barra .tabs{margin:0!important;width:calc(100% + 24px)}
+  .cal-nav{width:100%;flex-wrap:nowrap}
+  .cal-nav b{flex:1;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cal-barra .row{width:100%}
+  .paleta-dock{position:sticky;top:0;z-index:30;background:var(--bg);margin:0 -12px 8px;padding:8px 12px 6px;border-bottom:1px solid var(--line);box-shadow:0 4px 10px #0000000d}
+  .paleta-dock .paleta{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-bottom:4px}
+  .paleta-dock .paleta::-webkit-scrollbar{display:none}
+  .paleta-dock .pin{flex-shrink:0;min-height:40px}
+  .xls-wrap{max-height:70vh}
+  /* formularios a pantalla completa, con los botones siempre a mano */
+  #modal{padding:0;align-items:stretch}
+  .modal-box{border-radius:0;min-height:100%;max-width:none!important;padding:16px 14px 0}
+  .modal-actions{position:sticky;bottom:0;background:#fff;margin:18px -14px 0;padding:10px 14px calc(10px + env(safe-area-inset-bottom));border-top:1px solid var(--line)}
+  .modal-actions>*{flex:1 1 auto;justify-content:center}
+  .kpi .val{font-size:22px}
+}

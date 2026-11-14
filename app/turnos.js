@@ -4,7 +4,8 @@
 
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 const COLORES = ['#e53935', '#fb8c00', '#fdd835', '#7cb342', '#2e7d32', '#00897b', '#1e88e5', '#3949ab', '#8e24aa', '#d81b60', '#6d4c41', '#546e7a', '#f06292', '#9ccc65', '#4dd0e1', '#ffb74d'];
-Object.assign(ui, { pincel: '', calVista: 'semana', turTab: 'cal', turFecha: todayStr(), turMes: todayStr().slice(0, 7), turPintar: true });
+const esCel = () => window.matchMedia('(max-width:760px)').matches;
+Object.assign(ui, { pincel: '', calVista: esCel() ? 'dia' : 'semana', turTab: 'cal', turFecha: todayStr(), turMes: todayStr().slice(0, 7), turPintar: true });
 ui.turLocal = (() => { try { return localStorage.getItem('turLocal') || ''; } catch { return ''; } })();
 
 const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
@@ -246,10 +247,10 @@ Object.assign(ACTS, {
 const DIAS_UP = ['LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO', 'DOMINGO'];
 function periodo() {
   const f = ui.turFecha, v = ui.calVista, d = parseD(f);
-  if (v === 'dia') return { desde: f, hasta: f, nombre: `Día ${DIAS[(d.getDay() + 6) % 7].toLowerCase()} ${fmtDate(f)}`, plazo: 'día' };
-  if (v === 'semana') { const w = semana(f); return { desde: w[0], hasta: w[6], nombre: `Semana del ${fmtDate(w[0])} al ${fmtDate(w[6])}`, plazo: 'semana' }; }
-  if (v === 'mes') { const a = ymd(new Date(d.getFullYear(), d.getMonth(), 1)), b = ymd(new Date(d.getFullYear(), d.getMonth() + 1, 0)); return { desde: a, hasta: b, nombre: `Mes de ${MESES[d.getMonth()].toLowerCase()} ${d.getFullYear()}`, plazo: 'mes' }; }
-  return { desde: `${d.getFullYear()}-01-01`, hasta: `${d.getFullYear()}-12-31`, nombre: `Año ${d.getFullYear()}`, plazo: 'año' };
+  if (v === 'dia') return { desde: f, hasta: f, nombre: `Día ${DIAS[(d.getDay() + 6) % 7].toLowerCase()} ${fmtDate(f)}`, corto: `${DIAS[(d.getDay() + 6) % 7]} ${d.getDate()}/${d.getMonth() + 1}`, plazo: 'día' };
+  if (v === 'semana') { const w = semana(f); return { desde: w[0], hasta: w[6], nombre: `Semana del ${fmtDate(w[0])} al ${fmtDate(w[6])}`, corto: `${parseD(w[0]).getDate()}/${parseD(w[0]).getMonth() + 1} al ${parseD(w[6]).getDate()}/${parseD(w[6]).getMonth() + 1}`, plazo: 'semana' }; }
+  if (v === 'mes') { const a = ymd(new Date(d.getFullYear(), d.getMonth(), 1)), b = ymd(new Date(d.getFullYear(), d.getMonth() + 1, 0)); return { desde: a, hasta: b, nombre: `Mes de ${MESES[d.getMonth()].toLowerCase()} ${d.getFullYear()}`, corto: `${MESES[d.getMonth()]} ${d.getFullYear()}`, plazo: 'mes' }; }
+  return { desde: `${d.getFullYear()}-01-01`, hasta: `${d.getFullYear()}-12-31`, nombre: `Año ${d.getFullYear()}`, corto: `${d.getFullYear()}`, plazo: 'año' };
 }
 function metaPeriodo(p, v) { return v === 'dia' ? metaDia(p) : v === 'semana' ? p.metaSemanal || 0 : v === 'mes' ? metaMes(p) : metaMes(p) * 12; }
 function moverPeriodo(k) {
@@ -278,17 +279,18 @@ function paleta() {
 function tCal() {
   const v = ui.calVista, per = periodo(), todos = verTodos(), editable = v !== 'anio' && !todos, lid = localActivo();
   const vistas = [['dia', 'Día'], ['semana', 'Semana'], ['mes', 'Mes'], ['anio', 'Año']];
-  const grilla = (l, ed) => ({ dia: () => xlsGrid([ui.turFecha], true, l, ed), semana: () => xlsGrid(semana(ui.turFecha), false, l, ed), mes: () => xlsMes(l, ed), anio: () => xlsAnio(l) }[v]());
+  const grilla = (l, ed) => ({ dia: () => xlsGrid([ui.turFecha], true, l, ed), semana: () => xlsGrid(semana(ui.turFecha), false, l, ed), mes: () => (esCel() ? xlsMesCel(l) : xlsMes(l, ed)), anio: () => xlsAnio(l) }[v]());
   const cuerpo = !todos ? grilla(lid, true) : v === 'anio' ? xlsAnio('*')
     : locales().map((l) => `<h2 class="loc-tit"><span class="sw" style="background:${l.color}"></span> ${esc(l.nombre)} <button class="sm no-print" data-act="turLocal" data-id="${l.id}">Editar este local</button></h2>${grilla(l.id, false)}`).join('');
   return `<div class="card no-print cal-barra" style="margin-bottom:10px"><div class="spread">
     <div class="tabs" style="margin:0">${vistas.map(([k, l]) => `<button class="${v === k ? 'on' : ''}" data-act="calVista" data-id="${k}">${l}</button>`).join('')}</div>
-    <div class="row"><button data-act="calMov" data-id="-1">◀</button><b>${per.nombre}</b><button data-act="calMov" data-id="1">▶</button><button class="sm" data-act="turHoy">Hoy</button></div>
-    <div class="row">${todos ? '' : '<button class="pri sm" data-act="turRapido">➕ Cargar turno</button>'}${!todos && (v === 'dia' || v === 'semana') ? `<button class="sm" data-act="${v === 'dia' ? 'turCopiar' : 'turCopiarSem'}" ${v === 'dia' ? 'data-id="-7"' : ''}>Copiar ${v === 'dia' ? 'de la semana pasada' : 'semana anterior'}</button>` : ''}<button class="sm" data-act="turPrint">🖨 Imprimir</button>${editable ? `<label class="small row" style="gap:6px"><input type="checkbox" data-act="turPintarTog" ${ui.turPintar ? 'checked' : ''} style="width:auto"> Pintar</label>` : ''}</div></div>
-    ${todos ? '<p class="small muted" style="margin:8px 0 0">Estás viendo <b>todos los locales juntos</b>. Para cargar o pintar turnos, elegí un local arriba.</p>' : editable ? `<div class="mt">${paleta()}</div><p class="small muted" style="margin:6px 0 0">Elegí a la persona arriba y tocá o arrastrá sobre cualquier cuadrado para ponerla ahí. Tocá un cuadrado que ya es suyo para sacarlo. Tocá la banda amarilla para escribir una nota del día.</p>` : '<p class="small muted" style="margin:8px 0 0">Tocá un día para abrirlo y editarlo.</p>'}</div>
+    <div class="row cal-nav"><button data-act="calMov" data-id="-1" aria-label="Anterior">◀</button><b><span class="solo-d">${per.nombre}</span><span class="solo-m">${per.corto}</span></b><button data-act="calMov" data-id="1" aria-label="Siguiente">▶</button><button class="sm" data-act="turHoy">Hoy</button></div>
+    <div class="row">${todos ? '' : '<button class="pri sm" data-act="turRapido">➕ Cargar turno</button>'}${!todos && (v === 'dia' || v === 'semana') ? `<button class="sm" data-act="${v === 'dia' ? 'turCopiar' : 'turCopiarSem'}" ${v === 'dia' ? 'data-id="-7"' : ''}>Copiar ${v === 'dia' ? 'de la semana pasada' : 'semana anterior'}</button>` : ''}<button class="sm hide-m" data-act="turPrint">🖨 Imprimir</button>${editable ? `<label class="small row" style="gap:6px"><input type="checkbox" data-act="turPintarTog" ${ui.turPintar ? 'checked' : ''} style="width:auto"> Pintar</label>` : ''}</div></div>
+    ${todos ? '<p class="small muted" style="margin:8px 0 0">Estás viendo <b>todos los locales juntos</b>. Para cargar o pintar turnos, elegí un local arriba.</p>' : editable ? `<div class="mt hide-m">${paleta()}</div><p class="small muted hide-m" style="margin:6px 0 0">Elegí a la persona arriba y tocá o arrastrá sobre cualquier cuadrado para ponerla ahí. Tocá un cuadrado que ya es suyo para sacarlo. Tocá la banda amarilla para escribir una nota del día.</p>` : '<p class="small muted" style="margin:8px 0 0">Tocá un día para abrirlo y editarlo.</p>'}</div>
   <div class="print-title">${esc(state.config.negocio)}${multiLocal() ? ' · ' + esc(todos ? 'Todos los locales' : localInfo(lid).nombre) : ''} · Turnos · ${per.nombre}</div>
   ${avisoChoques(per)}
   ${todos ? tablaLocales(per) : ''}
+  ${editable ? `<div class="paleta-dock solo-m">${paleta()}<div class="small muted">Elegí a la persona y tocá o arrastrá los cuadrados. Tocá uno suyo para sacarlo. Para mover la planilla con el dedo, destildá Pintar.</div></div>` : ''}
   ${cuerpo}
   ${resumenPeriodo(per, v, todos ? '*' : lid)}`;
 }
@@ -433,8 +435,12 @@ function resumenPeriodo(per, v, lid = '*') {
     return { p, h, hl, meta, dif, dt, frase };
   });
   const tot = filas.reduce((s, r) => s + r.h, 0), totL = filas.reduce((s, r) => s + r.hl, 0);
-  return `<h2>Resumen · ${per.nombre} <span class="muted small" style="font-weight:400">(plazo: ${per.plazo}, ${nDias} día${nDias === 1 ? '' : 's'}${parcial ? `; la meta se cuenta hasta hoy, ${transc} de ${nDias} días` : ''})</span></h2>
-  <div class="tablewrap"><table class="xls-res"><thead><tr><th>Empleado</th>${porLocal ? `<th class="num">En ${esc(ln)}</th>` : ''}<th class="num">Horas trabajadas${multiLocal() ? ` (todos los locales${hayCat ? ' y catering' : ''})` : hayCat ? ' (con catering)' : ''}</th><th class="num">Meta ${art}${parcial ? ' (hasta hoy)' : ''}</th><th class="num">De más / de menos</th><th class="num">Días trabajados</th><th>Detalle</th></tr></thead><tbody>
+  const tarjetas = `<div class="res-cards solo-m">${filas.map((r) => `<div class="card res-card"><div class="spread"><span class="xls-nom" style="background:${r.p.color};color:${textoSobre(r.p.color)}">${esc(r.p.nombre.toUpperCase())}</span><b>${fmtH(r.h)}</b></div>
+    <div class="small mt">${porLocal && r.hl !== r.h ? `En ${esc(ln)}: ${fmtH(r.hl)} · ` : ''}${r.meta ? `Meta ${fmtH(r.meta)} · ${r.dif > 0 ? `<b class="c-in">+${fmtH(r.dif)} de más</b>` : r.dif < 0 ? `<b class="c-out">−${fmtH(-r.dif)} de menos</b>` : '<b>justo</b>'}` : 'Sin meta'} · ${r.dt} día${r.dt === 1 ? '' : 's'}</div>
+    <div class="small muted mt">${r.frase}</div></div>`).join('')}<div class="card res-card"><div class="spread"><b>TOTAL</b><b>${fmtH(tot)}</b></div></div></div>`;
+  return `<h2>Resumen · <span class="solo-d">${per.nombre}</span><span class="solo-m">${per.corto}</span> <span class="muted small hide-m" style="font-weight:400">(plazo: ${per.plazo}, ${nDias} día${nDias === 1 ? '' : 's'}${parcial ? `; la meta se cuenta hasta hoy, ${transc} de ${nDias} días` : ''})</span></h2>
+  ${tarjetas}
+  <div class="tablewrap solo-d"><table class="xls-res"><thead><tr><th>Empleado</th>${porLocal ? `<th class="num">En ${esc(ln)}</th>` : ''}<th class="num">Horas trabajadas${multiLocal() ? ` (todos los locales${hayCat ? ' y catering' : ''})` : hayCat ? ' (con catering)' : ''}</th><th class="num">Meta ${art}${parcial ? ' (hasta hoy)' : ''}</th><th class="num">De más / de menos</th><th class="num">Días trabajados</th><th>Detalle</th></tr></thead><tbody>
   ${filas.map((r) => `<tr><td><span class="xls-nom" style="background:${r.p.color};color:${textoSobre(r.p.color)}">${esc(r.p.nombre.toUpperCase())}</span></td>${porLocal ? `<td class="num">${fmtH(r.hl)}</td>` : ''}<td class="num"><b>${fmtH(r.h)}</b></td><td class="num">${r.meta ? fmtH(r.meta) : '–'}</td><td class="num">${!r.meta ? '–' : r.dif > 0 ? `<b class="c-in">+${fmtH(r.dif)} de más</b>` : r.dif < 0 ? `<b class="c-out">−${fmtH(-r.dif)} de menos</b>` : '<b>justo</b>'}</td><td class="num">${r.dt}</td><td class="small">${r.frase}</td></tr>`).join('')}
   <tr><td><b>TOTAL</b></td>${porLocal ? `<td class="num"><b>${fmtH(totL)}</b></td>` : ''}<td class="num"><b>${fmtH(tot)}</b></td><td></td><td></td><td></td><td></td></tr></tbody></table></div>`;
 }
@@ -521,3 +527,17 @@ Object.assign(ACTS, {
   locNew: () => locForm(),
   locEdit: (id) => locForm(localInfo(id)),
 });
+
+// Mes en el celular: calendario compacto, cada día con quién trabajó y cuántas horas. Tocás un día y se abre.
+function xlsMesCel(lid) {
+  const d = parseD(ui.turFecha), Y = d.getFullYear(), M = d.getMonth(), nd = new Date(Y, M + 1, 0).getDate(), off = (new Date(Y, M, 1).getDay() + 6) % 7;
+  let cells = ''; for (let i = 0; i < off; i++) cells += '<td class="mc-vacio"></td>';
+  for (let day = 1; day <= nd; day++) {
+    const f = ymd(new Date(Y, M, day)), docs = state.turnos.filter((t) => t.fecha === f && enLocal(t, lid));
+    const ppl = state.personal.map((p) => [p, docs.reduce((s, t) => s + ((t.celdas || {})[p.id] || []).length * (t.intervalo || 60) / 60, 0)]).filter(([, h]) => h);
+    cells += `<td class="mc-dia${f === todayStr() ? ' hoy' : ''}" data-act="calIrDia" data-id="${f}"><div class="mc-num">${day}</div>${ppl.map(([p, h]) => `<div class="mc-chip" style="background:${p.color};color:${textoSobre(p.color)}">${esc(p.nombre.slice(0, 3))} ${fmtNum(h)}</div>`).join('')}</td>`;
+    if ((off + day) % 7 === 0 && day < nd) cells += '</tr><tr>';
+  }
+  const resto = (7 - ((off + nd) % 7)) % 7; for (let i = 0; i < resto; i++) cells += '<td class="mc-vacio"></td>';
+  return `<div class="xls-mestit">${MESES[M].toUpperCase()} ${Y}</div><table class="mes-cel"><thead><tr>${['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((x) => `<th>${x}</th>`).join('')}</tr></thead><tbody><tr>${cells}</tr></tbody></table><p class="small muted">Tocá un día para verlo y cargar turnos.</p>`;
+}
