@@ -4,7 +4,7 @@ import { connectAuthEmulator, getAuth, onAuthStateChanged, signInWithEmailAndPas
 import { connectFirestoreEmulator, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, onSnapshot, writeBatch } from 'firebase/firestore';
 
 let app, auth, db;
-const COLS = ['productos', 'proveedores', 'movimientos', 'stockMovs', 'eventos', 'personal', 'turnos'];
+const COLS = ['productos', 'proveedores', 'movimientos', 'stockMovs', 'eventos', 'personal', 'turnos', 'caterings'];
 
 window.Cloud = {
   COLS,

@@ -57,7 +57,7 @@ const TIPOS_EV = {
 const EMPTY = () => ({
   version: 1,
   config: { negocio: 'Mi Negocio', moneda: '$', avisoDias: 3, ultimoRespaldo: null, turnos: { inicio: 6, fin: 22, intervalo: 60 } },
-  productos: [], proveedores: [], movimientos: [], stockMovs: [], eventos: [], personal: [], turnos: [],
+  productos: [], proveedores: [], movimientos: [], stockMovs: [], eventos: [], personal: [], turnos: [], caterings: [],
 });
 let state = EMPTY();
 
@@ -96,7 +96,7 @@ const prod = (id) => state.productos.find((p) => p.id === id);
 
 // ---------- Nube (Firebase) ----------
 const cloud = { cfg: null, uid: null, email: '', live: false, synced: {}, buffer: {}, reported: new Set(), unsub: null, pending: false, error: '', deferred: {} };
-const COLS = ['productos', 'proveedores', 'movimientos', 'stockMovs', 'eventos', 'personal', 'turnos'];
+const COLS = ['productos', 'proveedores', 'movimientos', 'stockMovs', 'eventos', 'personal', 'turnos', 'caterings'];
 function stable(v) { // JSON con claves ordenadas, para comparar registros
   if (Array.isArray(v)) return '[' + v.map(stable).join(',') + ']';
   if (v && typeof v === 'object') return '{' + Object.keys(v).filter((k) => v[k] !== undefined).sort().map((k) => JSON.stringify(k) + ':' + stable(v[k])).join(',') + '}';
@@ -201,7 +201,7 @@ const authMsg = (e) => ({ 'auth/invalid-credential': 'Email o contraseña incorr
 // ---------- Cálculos ----------
 function resumen(filtro) {
   let ingresos = 0, gastos = 0, inversion = 0, cmv = 0;
-  for (const m of state.movimientos) {
+  for (const m of movs()) {
     if (!filtro(m.fecha)) continue;
     if (m.tipo === 'ingreso') { ingresos += m.monto; if (m.productoId && m.cantidad) cmv += m.cantidad * (m.costoUnit || 0); }
     else if (m.tipo === 'gasto') gastos += m.monto;
@@ -209,8 +209,15 @@ function resumen(filtro) {
   }
   return { ingresos, gastos, inversion, cmv, ganancia: ingresos - cmv - gastos, caja: ingresos - gastos - inversion };
 }
-const valorStock = () => state.productos.reduce((s, p) => s + Math.max(0, p.stock) * (p.costo || 0), 0);
-const stockBajo = () => state.productos.filter((p) => p.stockMin > 0 && p.stock <= p.stockMin);
+// Stock y plata por local: cada producto y cada movimiento es de un local (sin local = el primero).
+// Con "Todos juntos" se ve la suma de todos los locales.
+const enAlcance = (x) => typeof verTodos !== 'function' || verTodos() || localDe(x) === localActivo();
+const prods = () => state.productos.filter(enAlcance);
+const movs = () => state.movimientos.filter(enAlcance);
+const localSelect = (sel) => (typeof multiLocal === 'function' && multiLocal() ? `<label class="f">Local<select name="local">${locales().map((l) => `<option value="${l.id}" ${l.id === (sel || localActivo()) ? 'selected' : ''}>${esc(l.nombre)}</option>`).join('')}</select></label>` : '');
+const selLocal = () => (typeof selectorLocal === 'function' ? selectorLocal() : '');
+const valorStock = () => prods().reduce((s, p) => s + Math.max(0, p.stock) * (p.costo || 0), 0);
+const stockBajo = () => prods().filter((p) => p.stockMin > 0 && p.stock <= p.stockMin);
 function avisos() {
   const hoy = todayStr(), lim = state.config.avisoDias || 3;
   const pend = state.eventos.filter((e) => !e.hecho);
@@ -233,7 +240,7 @@ function render() {
   document.body.classList.toggle('login', !!needLogin());
   syncBadge();
   if (needLogin()) { $('#main').innerHTML = vLogin(); const pw = $('#lgPass'); if (pw) pw.onkeydown = (e) => { if (e.key === 'Enter') ACTS.lgGo(); }; return; }
-  const fn = { inicio: vInicio, productos: vProductos, proveedores: vProveedores, finanzas: vFinanzas, balance: vBalance, calendario: vCalendario, turnos: vTurnos, ajustes: vAjustes }[view];
+  const fn = { inicio: vInicio, productos: vProductos, proveedores: vProveedores, finanzas: vFinanzas, balance: vBalance, calendario: vCalendario, turnos: vTurnos, catering: vCatering, ajustes: vAjustes }[view];
   // al redibujar, la pantalla y las planillas con desplazamiento quedan donde estaban
   const scrolls = $$('#main .xls-wrap, #main .tablewrap, #main .tg-wrap').map((el) => [el.scrollLeft, el.scrollTop]);
   const winX = window.scrollX, winY = window.scrollY, mismaVista = render._ultima === view;
@@ -279,6 +286,7 @@ function vInicio() {
   const recup = total.inversion > 0 ? (total.ganancia / total.inversion) * 100 : 0;
   return `
   <h1>Hola 👋</h1><p class="sub">${new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+  ${selLocal()}
   <div class="row" style="margin-bottom:16px">
     <button class="pri" data-act="venta">🛒 Registrar venta</button>
     <button data-act="compra">📥 Registrar compra</button>
@@ -289,6 +297,7 @@ function vInicio() {
   ${vencidos.length || proximos.length || bajo.length ? `<h2>⚠️ Avisos</h2>` : ''}
   ${vencidos.map((e) => evLine(e, true)).join('')}
   ${proximos.map((e) => evLine(e, false)).join('')}
+  ${typeof cateringProximos === 'function' ? cateringProximos() : ''}
   ${bajo.length ? `<div class="alert stock"><div>📦 <b>Stock bajo:</b> ${bajo.map((p) => `${esc(p.nombre)} (${fmtNum(p.stock)})`).join(', ')}</div><button class="sm" data-act="goto" data-id="productos">Ver productos</button></div>` : ''}
   <h2>Este mes (${MESES[new Date().getMonth()]})</h2>
   <div class="grid kpis">
@@ -304,27 +313,28 @@ function vInicio() {
     <p class="small muted" style="margin:8px 0 0">Mercadería en stock hoy (a costo): <b>${fmtMoney(valorStock())}</b>. ${total.inversion > 0 && recup < 100 ? `Faltan ${fmtMoney(total.inversion - total.ganancia)} de ganancia para recuperar lo invertido.` : total.inversion > 0 ? '¡Ya recuperaste lo invertido! 🎉' : ''}</p>
   </div>
   <h2>Últimos movimientos</h2>
-  ${movTable(state.movimientos.slice().sort(byFechaDesc).slice(0, 8), true)}
+  ${movTable(movs().sort(byFechaDesc).slice(0, 8), true)}
   `;
 }
 const byFechaDesc = (a, b) => (b.fecha + (b.creado || '')).localeCompare(a.fecha + (a.creado || ''));
 
 // Productos
 function vProductos() {
-  const cats = [...new Set(state.productos.map((p) => p.categoria).filter(Boolean))].sort();
+  const cats = [...new Set(prods().map((p) => p.categoria).filter(Boolean))].sort();
   const q = ui.prodQ.toLowerCase();
-  const list = state.productos.filter((p) => (!ui.prodCat || p.categoria === ui.prodCat) && (!q || [p.nombre, p.categoria, p.codigo, (prov(p.proveedorId) || {}).nombre].join(' ').toLowerCase().includes(q))).sort((a, b) => a.nombre.localeCompare(b.nombre));
+  const list = prods().filter((p) => (!ui.prodCat || p.categoria === ui.prodCat) && (!q || [p.nombre, p.categoria, p.codigo, (prov(p.proveedorId) || {}).nombre].join(' ').toLowerCase().includes(q))).sort((a, b) => a.nombre.localeCompare(b.nombre));
   return `
-  <div class="spread"><div><h1>Productos y stock</h1><p class="sub">${state.productos.length} productos · valor del stock: <b>${fmtMoney(valorStock())}</b></p></div>
+  <div class="spread"><div><h1>Productos y stock</h1><p class="sub">${prods().length} productos · valor del stock: <b>${fmtMoney(valorStock())}</b></p></div>
   <div class="row"><button data-act="compra">📥 Entrada de stock</button><button data-act="venta">🛒 Venta</button><button class="pri" data-act="prodNew">➕ Nuevo producto</button></div></div>
+  ${selLocal()}
   <div class="row" style="margin-bottom:14px"><input type="search" class="search" placeholder="Buscar producto, código o proveedor…" data-bind="prodQ" value="${esc(ui.prodQ)}">
   <select data-bind="prodCat" style="width:auto"><option value="">Todas las categorías</option>${cats.map((c) => `<option ${c === ui.prodCat ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
   ${list.length ? `<div class="grid prods">${list.map((p) => {
     const bajo = p.stockMin > 0 && p.stock <= p.stockMin;
     return `<div class="card prod" data-act="prodView" data-id="${p.id}"><div class="ph" style="${p.foto ? `background-image:url('${p.foto}')` : ''}">${p.foto ? '' : '📦'}</div>
-    <div class="bd"><div class="nm">${esc(p.nombre)}</div><div class="meta">${esc(p.categoria || 'Sin categoría')}${p.proveedorId && prov(p.proveedorId) ? ' · ' + esc(prov(p.proveedorId).nombre) : ''}</div>
+    <div class="bd"><div class="nm">${esc(p.nombre)}</div><div class="meta">${typeof verTodos === 'function' && verTodos() ? `<span class="sw" style="background:${localInfo(localDe(p)).color}"></span>${esc(localInfo(localDe(p)).nombre)} · ` : ''}${esc(p.categoria || 'Sin categoría')}${p.proveedorId && prov(p.proveedorId) ? ' · ' + esc(prov(p.proveedorId).nombre) : ''}</div>
     <div class="spread"><span>${fmtMoney(p.precio)}</span><span class="badge ${p.stock <= 0 ? 'out' : bajo ? 'warn' : 'in'}">Stock: ${fmtNum(p.stock)} ${esc(p.unidad || '')}</span></div></div></div>`;
-  }).join('')}</div>` : `<div class="card empty">${state.productos.length ? 'No hay productos que coincidan con la búsqueda.' : 'Todavía no cargaste productos. Tocá <b>➕ Nuevo producto</b> para empezar.'}</div>`}`;
+  }).join('')}</div>` : `<div class="card empty">${prods().length ? 'No hay productos que coincidan con la búsqueda.' : 'Todavía no cargaste productos. Tocá <b>➕ Nuevo producto</b> para empezar.'}</div>`}`;
 }
 
 // Proveedores
@@ -352,11 +362,12 @@ function movTable(list, compact) {
 }
 function vFinanzas() {
   const q = ui.movQ.toLowerCase();
-  const list = state.movimientos.filter((m) => (!ui.movMes || m.fecha.startsWith(ui.movMes)) && (!ui.movTipo || m.tipo === ui.movTipo) && (!q || [m.categoria, m.descripcion, (prov(m.proveedorId) || {}).nombre, (prod(m.productoId) || {}).nombre].join(' ').toLowerCase().includes(q))).sort(byFechaDesc);
+  const list = movs().filter((m) => (!ui.movMes || m.fecha.startsWith(ui.movMes)) && (!ui.movTipo || m.tipo === ui.movTipo) && (!q || [m.categoria, m.descripcion, (prov(m.proveedorId) || {}).nombre, (prod(m.productoId) || {}).nombre].join(' ').toLowerCase().includes(q))).sort(byFechaDesc);
   const r = { ingreso: 0, gasto: 0, inversion: 0 }; list.forEach((m) => (r[m.tipo] += m.monto));
   return `
   <div class="spread"><div><h1>Movimientos de dinero</h1><p class="sub">Todo lo que entra y sale: cobros, gastos e inversiones.</p></div>
   <div class="row"><button data-act="movNew" data-id="ingreso">➕ Cobro</button><button data-act="movNew" data-id="gasto">➖ Gasto</button><button data-act="movNew" data-id="inversion">📈 Inversión</button></div></div>
+  ${selLocal()}
   <div class="row" style="margin-bottom:14px">
     <input type="month" data-bind="movMes" value="${esc(ui.movMes)}" style="width:auto"> <button class="sm" data-act="movAll">Ver todo</button>
     <select data-bind="movTipo" style="width:auto"><option value="">Todos los tipos</option>${Object.entries(TIPOS_MOV).map(([k, t]) => `<option value="${k}" ${k === ui.movTipo ? 'selected' : ''}>${t.lbl}</option>`).join('')}</select>
@@ -386,13 +397,14 @@ function vBalance() {
   const mesKey = `${A}-${String(M + 1).padStart(2, '0')}`;
   const rm = resumen((f) => f.startsWith(mesKey)), ra = resumen((f) => f.startsWith(String(A))), rt = resumen(() => true);
   const meses = MES_C.map((lbl, i) => { const k = `${A}-${String(i + 1).padStart(2, '0')}`; const r = resumen((f) => f.startsWith(k)); return { lbl, k, ...r, egresos: r.gastos + r.inversion }; });
-  const anios = [...new Set([new Date().getFullYear(), ...state.movimientos.map((m) => Number(m.fecha.slice(0, 4)))])].sort((a, b) => b - a);
-  const gastoCats = {}; state.movimientos.filter((m) => m.tipo === 'gasto' && m.fecha.startsWith(String(A))).forEach((m) => (gastoCats[m.categoria || 'Otro'] = (gastoCats[m.categoria || 'Otro'] || 0) + m.monto));
-  const provTot = {}; state.movimientos.filter((m) => m.tipo === 'inversion' && m.proveedorId).forEach((m) => (provTot[m.proveedorId] = (provTot[m.proveedorId] || 0) + m.monto));
+  const anios = [...new Set([new Date().getFullYear(), ...movs().map((m) => Number(m.fecha.slice(0, 4)))])].sort((a, b) => b - a);
+  const gastoCats = {}; movs().filter((m) => m.tipo === 'gasto' && m.fecha.startsWith(String(A))).forEach((m) => (gastoCats[m.categoria || 'Otro'] = (gastoCats[m.categoria || 'Otro'] || 0) + m.monto));
+  const provTot = {}; movs().filter((m) => m.tipo === 'inversion' && m.proveedorId).forEach((m) => (provTot[m.proveedorId] = (provTot[m.proveedorId] || 0) + m.monto));
   const recup = rt.inversion > 0 ? (rt.ganancia / rt.inversion) * 100 : 0;
   const block = (r) => `<div class="grid kpis">${kpi('Cobros / Ventas', fmtMoney(r.ingresos), 'c-in')}${kpi('Costo de lo vendido', fmtMoney(r.cmv), 'c-out', 'Lo que te costó la mercadería vendida')}${kpi('Gastos', fmtMoney(r.gastos), 'c-out')}${kpi('Ganancia', fmtMoney(r.ganancia), r.ganancia >= 0 ? 'c-in' : 'c-out', 'Ventas − costo − gastos')}${kpi('Inversión', fmtMoney(r.inversion), 'c-inv')}${kpi('Caja neta', fmtMoney(r.caja), r.caja >= 0 ? 'c-in' : 'c-out', 'Lo que entró − todo lo que salió')}</div>`;
   return `
   <h1>Balance</h1><p class="sub">Mensual, anual, y cuánto recuperaste de lo invertido.</p>
+  ${selLocal()}
   <div class="row" style="margin-bottom:6px"><select data-bind="balAnio" style="width:auto">${anios.map((a) => `<option ${a === A ? 'selected' : ''}>${a}</option>`).join('')}</select>
   <select data-bind="balMes" style="width:auto">${MESES.map((m, i) => `<option value="${i}" ${i === M ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
   <h2>Mes: ${MESES[M]} ${A}</h2>${block(rm)}
@@ -482,7 +494,7 @@ function vAjustes() {
 
 // ---------- Modales ----------
 function openModal(html, onReady) {
-  const m = $('#modal'); $('.modal-box', m).innerHTML = html; m.classList.remove('hidden');
+  const m = $('#modal'), bx = $('.modal-box', m); bx.className = 'modal-box'; bx.onclick = bx.oninput = bx.onchange = null; bx.innerHTML = html; m.classList.remove('hidden');
   const first = $('input:not([type=hidden]):not([type=file]),select,textarea', m); if (first && window.innerWidth > 760) first.focus();
   onReady && onReady($('.modal-box', m));
 }
@@ -495,7 +507,7 @@ function confirmBox(msg, ok, okLbl = 'Sí, continuar') {
 }
 const vals = (box) => { const o = {}; $$('[name]', box).forEach((el) => (o[el.name] = el.type === 'checkbox' ? el.checked : el.value.trim())); return o; };
 const provOptions = (sel) => `<option value="">— Ninguno —</option>${state.proveedores.slice().sort((a, b) => a.nombre.localeCompare(b.nombre)).map((p) => `<option value="${p.id}" ${p.id === sel ? 'selected' : ''}>${esc(p.nombre)}</option>`).join('')}`;
-const prodOptions = (sel) => `<option value="">— Elegí un producto —</option>${state.productos.slice().sort((a, b) => a.nombre.localeCompare(b.nombre)).map((p) => `<option value="${p.id}" ${p.id === sel ? 'selected' : ''}>${esc(p.nombre)} (stock ${fmtNum(p.stock)})</option>`).join('')}`;
+const prodOptions = (sel) => `<option value="">— Elegí un producto —</option>${prods().sort((a, b) => a.nombre.localeCompare(b.nombre)).map((p) => `<option value="${p.id}" ${p.id === sel ? 'selected' : ''}>${esc(p.nombre)} (stock ${fmtNum(p.stock)})</option>`).join('')}`;
 
 function resizeImage(file, max = 800) {
   return new Promise((res, rej) => {
@@ -521,6 +533,7 @@ function prodForm(p) {
     <div class="full photo-pick"><div class="prev" id="pPrev" style="${foto ? `background-image:url('${foto}')` : ''}">${foto ? '' : '📷'}</div>
       <div class="row"><label class="btn" style="cursor:pointer">📷 ${foto ? 'Cambiar foto' : 'Agregar foto'}<input type="file" accept="image/*" id="pFoto" hidden></label>${foto ? '<button class="sm danger" id="pFotoDel">Quitar</button>' : ''}</div></div>
     <label class="f full">Nombre *<input name="nombre" value="${esc(p.nombre)}" placeholder="Ej: Coca-Cola 1,5 L"></label>
+    ${isNew ? localSelect() : ''}
     <label class="f">Categoría<input name="categoria" list="catList" value="${esc(p.categoria)}" placeholder="Ej: Bebidas"><datalist id="catList">${cats.map((c) => `<option value="${esc(c)}">`).join('')}</datalist></label>
     <label class="f">Código / SKU<input name="codigo" value="${esc(p.codigo)}"></label>
     <label class="f">Precio de costo (lo que pagás)<input name="costo" inputmode="decimal" value="${p.costo || ''}"></label>
@@ -543,7 +556,7 @@ function prodForm(p) {
       const campos = $$('.extra', box).map((r) => ({ k: $('.ck', r).value.trim(), v: $('.cv', r).value.trim() })).filter((c) => c.k || c.v);
       const data = { nombre: v.nombre, categoria: v.categoria, codigo: v.codigo, unidad: v.unidad, costo: numIn(v.costo), precio: numIn(v.precio), stockMin: numIn(v.stockMin), proveedorId: v.proveedorId, notas: v.notas, campos, foto };
       if (isNew) {
-        const np = { id: uid(), creado: new Date().toISOString(), stock: numIn(v.stock), ...data }; state.productos.push(np);
+        const np = { id: uid(), creado: new Date().toISOString(), stock: numIn(v.stock), local: v.local || localActivo(), ...data }; state.productos.push(np);
         if (np.stock) state.stockMovs.push({ id: uid(), fecha: todayStr(), productoId: np.id, tipo: 'ajuste', cantidad: np.stock, nota: 'Stock inicial' });
       } else Object.assign(p, data);
       closeModal(); commit(); toast('Producto guardado ✔');
@@ -575,7 +588,7 @@ function prodView(id) {
 
 // Venta
 function ventaForm(prodId) {
-  if (!state.productos.length) return alertBox('Primero cargá al menos un producto.');
+  if (!prods().length) return alertBox(typeof verTodos === 'function' && verTodos() ? 'Elegí un local arriba para registrar ventas o compras.' : 'Primero cargá al menos un producto en este local.');
   openModal(`<h3>🛒 Registrar venta</h3><div class="form">
     <label class="f full">Producto *<select name="productoId" id="vProd">${prodOptions(prodId)}</select></label>
     <label class="f">Cantidad *<input name="cantidad" id="vCant" inputmode="decimal" value="1"></label>
@@ -605,7 +618,7 @@ function ventaForm(prodId) {
         state.eventos.push({ id: uid(), tipo: 'cobrar', titulo: `Venta fiada: ${cant} × ${p.nombre}`, persona: v.descripcion, monto: total, fecha: v.fechaCobro || todayStr(), notas: '', hecho: false, venta: { productoId: p.id, cantidad: cant, costoUnit: p.costo || 0, fechaVenta: v.fecha } });
         closeModal(); commit(); toast('Venta fiada registrada. Cuando te pague, marcala como resuelta en el calendario.');
       } else {
-        state.movimientos.push({ id: uid(), creado: new Date().toISOString(), fecha: v.fecha, tipo: 'ingreso', categoria: 'Venta', descripcion: v.descripcion, monto: total, productoId: p.id, cantidad: cant, costoUnit: p.costo || 0 });
+        state.movimientos.push({ id: uid(), creado: new Date().toISOString(), fecha: v.fecha, tipo: 'ingreso', categoria: 'Venta', descripcion: v.descripcion, monto: total, productoId: p.id, cantidad: cant, costoUnit: p.costo || 0, local: localDe(p) });
         closeModal(); commit(); toast('Venta registrada ✔');
       }
     };
@@ -614,7 +627,7 @@ function ventaForm(prodId) {
 
 // Compra / entrada de stock
 function compraForm(prodId) {
-  if (!state.productos.length) return alertBox('Primero cargá al menos un producto.');
+  if (!prods().length) return alertBox(typeof verTodos === 'function' && verTodos() ? 'Elegí un local arriba para registrar ventas o compras.' : 'Primero cargá al menos un producto en este local.');
   const p0 = prod(prodId);
   openModal(`<h3>📥 Entrada de mercadería</h3><div class="form">
     <label class="f full">Producto *<select name="productoId" id="cProd">${prodOptions(prodId)}</select></label>
@@ -639,7 +652,7 @@ function compraForm(prodId) {
       p.stock += cant; if (v.actCosto && numIn(v.costo)) p.costo = numIn(v.costo); if (v.proveedorId && !p.proveedorId) p.proveedorId = v.proveedorId;
       state.stockMovs.push({ id: uid(), fecha: v.fecha, productoId: p.id, tipo: 'entrada', cantidad: cant, nota: [(prov(v.proveedorId) || {}).nombre, v.descripcion].filter(Boolean).join(' · ') || 'Compra' });
       if (v.debo) state.eventos.push({ id: uid(), tipo: 'pagar', titulo: `Pagar compra: ${cant} × ${p.nombre}`, persona: (prov(v.proveedorId) || {}).nombre || '', monto: total, fecha: v.fechaPago, notas: v.descripcion, hecho: false, mov: v.registrar && total ? { tipo: 'inversion', categoria: 'Mercadería', proveedorId: v.proveedorId, productoId: p.id, cantidad: cant } : null });
-      else if (v.registrar && total) state.movimientos.push({ id: uid(), creado: new Date().toISOString(), fecha: v.fecha, tipo: 'inversion', categoria: 'Mercadería', descripcion: v.descripcion, monto: total, proveedorId: v.proveedorId, productoId: p.id, cantidad: cant, compra: true });
+      else if (v.registrar && total) state.movimientos.push({ id: uid(), creado: new Date().toISOString(), fecha: v.fecha, tipo: 'inversion', categoria: 'Mercadería', descripcion: v.descripcion, monto: total, proveedorId: v.proveedorId, productoId: p.id, cantidad: cant, compra: true, local: localDe(p) });
       closeModal(); commit(); toast('Entrada registrada ✔');
     };
     if (prodId) upd();
@@ -701,13 +714,14 @@ function movForm(m, tipo, extra = {}) {
     <label class="f">Monto *<input name="monto" inputmode="decimal" value="${m.monto || ''}"></label>
     <label class="f">Proveedor (opcional)<select name="proveedorId">${provOptions(m.proveedorId)}</select></label>
     <label class="f">Detalle<input name="descripcion" value="${esc(m.descripcion)}"></label>
+    ${m.productoId ? '' : localSelect(m.local)}
     ${m.productoId ? `<p class="full small muted">Vinculado a ${fmtNum(m.cantidad)} × ${esc((prod(m.productoId) || {}).nombre || 'producto eliminado')}. Editar este movimiento no cambia el stock.</p>` : ''}
   </div><div class="modal-actions">${isNew ? '' : '<button class="danger" id="mDel">Eliminar</button>'}<button data-act="close">Cancelar</button><button class="pri" id="mOk">Guardar</button></div>`, (box) => {
     $('#mTipo', box).onchange = (e) => { $('#mCats', box).innerHTML = catOpts(e.target.value); $('#mCat', box).value = CATS[e.target.value][0]; };
     if (!isNew) $('#mDel', box).onclick = () => confirmBox(`Se va a eliminar este movimiento de ${fmtMoney(m.monto)}.${m.productoId ? '<br><span class="small">El stock no se modifica: si hace falta, ajustalo desde el producto.</span>' : ''}`, () => { state.movimientos = state.movimientos.filter((x) => x.id !== m.id); commit(); toast('Movimiento eliminado'); }, 'Eliminar');
     $('#mOk', box).onclick = () => {
       const v = vals(box), monto = numIn(v.monto); if (monto <= 0) return toast('Poné el monto');
-      const data = { tipo: v.tipo, fecha: v.fecha, categoria: v.categoria, descripcion: v.descripcion, monto, proveedorId: v.proveedorId };
+      const data = { tipo: v.tipo, fecha: v.fecha, categoria: v.categoria, descripcion: v.descripcion, monto, proveedorId: v.proveedorId, ...(v.local ? { local: v.local } : {}) };
       if (isNew) state.movimientos.push({ id: uid(), creado: new Date().toISOString(), ...extra, ...data }); else Object.assign(m, data);
       closeModal(); commit(); toast('Movimiento guardado ✔');
     };
@@ -752,7 +766,7 @@ function evDone(id) {
     $('#dSi', box).onclick = () => {
       const fecha = $('#dFecha', box).value || todayStr();
       const cat = e.venta ? 'Venta' : e.mov ? e.mov.categoria : tipoMov === 'ingreso' ? 'Cobro de deuda' : 'Pago de deuda';
-      state.movimientos.push({ id: uid(), creado: new Date().toISOString(), fecha, tipo: tipoMov, categoria: cat, descripcion: [e.titulo, e.persona].filter(Boolean).join(' · '), monto: e.monto, ...(e.venta ? { productoId: e.venta.productoId, cantidad: e.venta.cantidad, costoUnit: e.venta.costoUnit } : {}), ...(e.mov ? { proveedorId: e.mov.proveedorId, productoId: e.mov.productoId, cantidad: e.mov.cantidad } : {}) });
+      state.movimientos.push({ id: uid(), creado: new Date().toISOString(), fecha, tipo: tipoMov, categoria: cat, descripcion: [e.titulo, e.persona].filter(Boolean).join(' · '), monto: e.monto, ...(e.venta ? { productoId: e.venta.productoId, cantidad: e.venta.cantidad, costoUnit: e.venta.costoUnit } : {}), ...(e.mov ? { proveedorId: e.mov.proveedorId, productoId: e.mov.productoId, cantidad: e.mov.cantidad } : {}), local: (e.venta || e.mov) && prod((e.venta || e.mov).productoId) ? localDe(prod((e.venta || e.mov).productoId)) : localActivo() });
       e.hecho = true; closeModal(); commit(); toast(`Resuelto y ${lbl} registrado ✔`);
     };
   });

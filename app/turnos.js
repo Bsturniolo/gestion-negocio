@@ -5,6 +5,7 @@
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 const COLORES = ['#e53935', '#fb8c00', '#fdd835', '#7cb342', '#2e7d32', '#00897b', '#1e88e5', '#3949ab', '#8e24aa', '#d81b60', '#6d4c41', '#546e7a', '#f06292', '#9ccc65', '#4dd0e1', '#ffb74d'];
 Object.assign(ui, { pincel: '', calVista: 'semana', turTab: 'cal', turFecha: todayStr(), turMes: todayStr().slice(0, 7), turPintar: true });
+ui.turLocal = (() => { try { return localStorage.getItem('turLocal') || ''; } catch { return ''; } })();
 
 const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 const toMin = (s) => { const [h, m] = String(s || '0:0').split(':').map(Number); return (h || 0) * 60 + (m || 0); };
@@ -15,12 +16,32 @@ const semana = (f) => { const l = lunes(f); return [0, 1, 2, 3, 4, 5, 6].map((i)
 const turCfg = () => Object.assign({ inicio: 6, fin: 22, intervalo: 60, columnas: 8 }, state.config.turnos || {});
 const persona = (id) => state.personal.find((p) => p.id === id);
 const activos = () => state.personal.filter((p) => p.activo !== false).sort((a, b) => (a.orden || 0) - (b.orden || 0) || a.nombre.localeCompare(b.nombre));
-const diaDoc = (f) => state.turnos.find((t) => t.id === f);
+// ---------- Locales: varias sucursales en la misma cuenta ----------
+// Cada día de turnos pertenece a un local. Los días del primer local conservan su id de siempre (la fecha)
+// y los de los demás locales usan "fecha@local", así lo que ya estaba cargado no se toca.
+const LOCAL0 = 'principal';
+const LCOLORES = ['#1e88e5', '#e53935', '#2e7d32', '#8e24aa', '#fb8c00', '#00897b', '#6d4c41', '#3949ab'];
+function locales() { const l = state.config.locales; return Array.isArray(l) && l.length ? l : [{ id: LOCAL0, nombre: 'Local 1', color: LCOLORES[0] }]; }
+const multiLocal = () => locales().length > 1;
+const localDe = (t) => t.local || LOCAL0;
+const CATER = { id: 'catering', nombre: 'Catering', color: '#6d4c41' };
+const localInfo = (id) => (id === CATER.id ? CATER : locales().find((l) => l.id === id) || { id, nombre: 'Local borrado', color: '#9e9e9e' });
+// Horas del personal en caterings confirmados o realizados (se cargan en la sección Catering)
+const catEquipo = (desde, hasta) => (state.caterings || []).filter((c) => (c.estado === 'confirmado' || c.estado === 'realizado') && c.fecha >= desde && c.fecha <= hasta).flatMap((c) => (c.equipo || []).map((e) => ({ ...e, fecha: c.fecha })));
+const horasCatering = (pid, desde, hasta) => catEquipo(desde, hasta).filter((e) => e.pid === pid).reduce((s, e) => s + Math.max(0, e.hasta - e.desde) / 60, 0);
+// columnas para comparar horas: los locales y, si hay, el catering
+const lugaresHoras = (desde, hasta) => [...locales(), ...(catEquipo(desde, hasta).length ? [CATER] : [])];
+const verTodos = () => ui.turLocal === '*' && multiLocal();
+function localActivo() { const ls = locales(); return ls.some((l) => l.id === ui.turLocal) ? ui.turLocal : ls[0].id; }
+const enLocal = (t, lid) => lid === '*' || localDe(t) === lid;
+const docId = (f, lid) => (lid === LOCAL0 ? f : `${f}@${lid}`);
+const diaDoc = (f, lid = localActivo()) => state.turnos.find((t) => t.fecha === f && localDe(t) === lid);
 const textoSobre = (hex) => { const n = parseInt(String(hex).slice(1), 16); const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255; return (r * 299 + g * 587 + b * 114) / 1000 > 150 ? '#1d2624' : '#fff'; };
 
-function horasDia(f, pid) { const d = diaDoc(f); return d ? ((d.celdas || {})[pid] || []).length * (d.intervalo || 60) / 60 : 0; }
-function horasRango(pid, desde, hasta) { return state.turnos.filter((t) => t.fecha >= desde && t.fecha <= hasta).reduce((s, t) => s + ((t.celdas || {})[pid] || []).length * (t.intervalo || 60) / 60, 0); }
-function diasTrabajados(pid, desde, hasta) { return state.turnos.filter((t) => t.fecha >= desde && t.fecha <= hasta && ((t.celdas || {})[pid] || []).length).length; }
+function horasDia(f, pid, lid = localActivo()) { const d = diaDoc(f, lid); return d ? ((d.celdas || {})[pid] || []).length * (d.intervalo || 60) / 60 : 0; }
+// sin local = todos los locales juntos (las metas se cuentan con el total de horas de la persona)
+function horasRango(pid, desde, hasta, lid = '*') { return state.turnos.filter((t) => t.fecha >= desde && t.fecha <= hasta && enLocal(t, lid)).reduce((s, t) => s + ((t.celdas || {})[pid] || []).length * (t.intervalo || 60) / 60, 0) + (lid === '*' || lid === CATER.id ? horasCatering(pid, desde, hasta) : 0); }
+function diasTrabajados(pid, desde, hasta, lid = '*') { return new Set([...state.turnos.filter((t) => t.fecha >= desde && t.fecha <= hasta && enLocal(t, lid) && ((t.celdas || {})[pid] || []).length).map((t) => t.fecha), ...(lid === '*' || lid === CATER.id ? catEquipo(desde, hasta).filter((e) => e.pid === pid).map((e) => e.fecha) : [])]).size; }
 function metaDia(p) { return p.metaDiaria > 0 ? p.metaDiaria : p.metaSemanal > 0 ? Math.round((p.metaSemanal / 6) * 10) / 10 : 0; }
 function metaMes(p) { return p.metaMensual > 0 ? p.metaMensual : p.metaSemanal > 0 ? Math.round(p.metaSemanal * 4.33) : 0; }
 function slotsDe(f) {
@@ -36,9 +57,9 @@ function gente(f) { // activos + quien tenga horas ese día aunque esté inactiv
   const extra = d ? Object.keys(d.celdas || {}).filter((id) => !ids.has(id) && (d.celdas[id] || []).length && persona(id)).map(persona) : [];
   return [...activos(), ...extra];
 }
-function ensureDia(f) {
-  let d = diaDoc(f);
-  if (!d) { d = { id: f, fecha: f, intervalo: turCfg().intervalo, carriles: turCfg().columnas, slots: {}, celdas: {}, nota: '' }; state.turnos.push(d); }
+function ensureDia(f, lid = localActivo()) {
+  let d = diaDoc(f, lid);
+  if (!d) { d = { id: docId(f, lid), fecha: f, local: lid, intervalo: turCfg().intervalo, carriles: turCfg().columnas, slots: {}, celdas: {}, nota: '' }; state.turnos.push(d); }
   ensureSlots(d);
   return d;
 }
@@ -69,6 +90,7 @@ function vTurnos() {
   const tabs = [['cal', '📅 Calendario'], ['mes', '📈 Rendimiento'], ['personal', '👤 Personal']];
   const fn = { cal: tCal, mes: tMes, personal: tPersonal }[ui.turTab] || tCal;
   return `<div class="spread"><div><h1>Turnos del personal</h1><p class="sub">Planilla por día, conteo de horas y metas.</p></div></div>
+  ${selectorLocal()}
   <div class="tabs">${tabs.map(([k, l]) => `<button class="${ui.turTab === k ? 'on' : ''}" data-act="turTab" data-id="${k}">${l}</button>`).join('')}</div>${fn()}`;
 }
 
@@ -84,12 +106,13 @@ function tMes() {
     <div class="spread"><b><span class="sw" style="background:${r.p.color}"></span> ${esc(r.p.nombre)}</b>${difBadge(r.h, r.meta)}</div>
     <div style="font-size:24px;font-weight:700;margin-top:6px">${fmtH(r.h)} <span class="small muted" style="font-weight:400">${r.meta ? 'de ' + fmtH(r.meta) : ''}</span></div>
     <div class="progress mt"><div style="width:${Math.min(100, r.pct)}%;background:${r.pct >= 100 ? 'var(--in)' : r.pct >= 75 ? 'var(--warn)' : 'var(--out)'}"></div></div>
+    ${multiLocal() || catEquipo(desde, hasta).length ? `<div class="small mt">${lugaresHoras(desde, hasta).map((l) => [l, horasRango(r.p.id, desde, hasta, l.id)]).filter(([, h]) => h).map(([l, h]) => `<span class="sw" style="background:${l.color}"></span> ${esc(l.nombre)}: <b>${fmtH(h)}</b>`).join(' · ') || '<span class="muted">Sin horas este mes</span>'}</div>` : ''}
     <div class="small muted mt">${r.meta ? `${fmtNum(Math.round(r.pct))}% de la meta · ` : ''}${r.dt} día${r.dt === 1 ? '' : 's'} trabajado${r.dt === 1 ? '' : 's'}${r.dt ? ` · promedio ${fmtH(r.h / r.dt)} por día` : ''}</div>
   </div>`).join('')}</div>
   <h2>Semana por semana</h2>
   <div class="tablewrap"><table><thead><tr><th>Persona</th>${sems.map((l) => `<th class="num">Sem. ${parseD(l).getDate()}/${parseD(l).getMonth() + 1}</th>`).join('')}<th class="num">Meta semanal</th></tr></thead><tbody>
   ${rows.map(({ p }) => `<tr><td><span class="sw" style="background:${p.color}"></span> ${esc(p.nombre)}</td>${sems.map((l) => { const h = horasRango(p.id, l, addDays(l, 6)); const cls = !p.metaSemanal || !h ? '' : h >= p.metaSemanal ? 'c-in' : 'c-out'; return `<td class="num ${cls}">${h ? fmtNum(h) : '–'}</td>`; }).join('')}<td class="num">${p.metaSemanal ? fmtH(p.metaSemanal) : '–'}</td></tr>`).join('')}
-  </tbody></table></div><p class="small muted">En verde las semanas que cumplió la meta y en rojo las que quedó debiendo horas. Las semanas que empiezan o terminan en otro mes se cuentan completas.</p>`
+  </tbody></table></div><p class="small muted">En verde las semanas que cumplió la meta y en rojo las que quedó debiendo horas. Las semanas que empiezan o terminan en otro mes se cuentan completas.${multiLocal() ? ' Las horas suman todos los locales.' : ''}</p>`
   : '<div class="card empty">Todavía no hay personal cargado.</div>'}`;
 }
 
@@ -100,6 +123,11 @@ function tPersonal() {
   ${lista.length ? `<div class="tablewrap"><table><thead><tr><th>Nombre</th><th class="num">Meta semanal</th><th class="num">Meta mensual</th><th>Estado</th><th></th></tr></thead><tbody>
   ${lista.map((p) => `<tr${p.activo === false ? ' class="muted"' : ''}><td><span class="sw" style="background:${p.color}"></span> <b>${esc(p.nombre)}</b>${p.rol ? ` <span class="small muted">· ${esc(p.rol)}</span>` : ''}</td><td class="num">${p.metaSemanal ? fmtH(p.metaSemanal) : '–'}</td><td class="num">${metaMes(p) ? fmtH(metaMes(p)) + (p.metaMensual ? '' : ' <span class="small muted">(auto)</span>') : '–'}</td><td>${p.activo === false ? '<span class="badge gray">Ya no trabaja</span>' : '<span class="badge in">Activo</span>'}</td><td class="right"><button class="sm" data-act="perEdit" data-id="${p.id}">Editar</button></td></tr>`).join('')}
   </tbody></table></div>` : '<div class="card empty">Agregá a las personas que trabajan, cada una con su color.</div>'}
+  <h2>Locales</h2>
+  <div class="tablewrap"><table><thead><tr><th>Local</th><th class="num">Días con turnos cargados</th><th></th></tr></thead><tbody>
+  ${locales().map((l) => `<tr><td><span class="sw" style="background:${l.color}"></span> <b>${esc(l.nombre)}</b></td><td class="num">${state.turnos.filter((t) => localDe(t) === l.id).length}</td><td class="right"><button class="sm" data-act="locEdit" data-id="${l.id}">Editar</button></td></tr>`).join('')}
+  </tbody></table></div>
+  <div class="row mt"><button data-act="locNew">➕ Agregar local</button><span class="small muted">El personal es el mismo para todos los locales. Si alguien trabaja en dos, sus horas se suman para la meta.</span></div>
   <h2>Horario de la planilla</h2>
   <div class="card"><div class="form" style="grid-template-columns:repeat(4,1fr)">
     <label class="f">Desde la hora<input id="tcIni" type="number" min="0" max="23" value="${c.inicio}"></label>
@@ -144,7 +172,7 @@ function turRapido() {
   openModal(`<h3>Cargar turno</h3><p class="small muted" style="margin-top:0">Se dibuja solo en la planilla. No hace falta tocar el calendario.</p><div class="form">
     <div class="full"><div class="small muted" style="margin-bottom:6px">Persona</div><div class="paleta" id="trPpl">${ppl.map((p) => `<button type="button" class="pin${p.id === pid0 ? ' sel' : ''}" data-p="${p.id}" style="background:${p.color};color:${textoSobre(p.color)}">${esc(p.nombre.toUpperCase())}</button>`).join('')}</div></div>
     <label class="f">Día<input type="date" name="fecha" id="trFecha" value="${ui.turFecha}"></label>
-    <div></div>
+    ${multiLocal() ? `<label class="f">Local<select name="local">${locales().map((l) => `<option value="${l.id}" ${l.id === localActivo() ? 'selected' : ''}>${esc(l.nombre)}</option>`).join('')}</select></label>` : '<div></div>'}
     <label class="f">Entró a las<select name="desde">${opt(8 * 60)}</select></label>
     <label class="f">Se fue a las<select name="hasta">${opt(16 * 60)}</select></label>
     <div class="full"><div class="small muted" style="margin-bottom:6px">Repetir el mismo horario otros días de esa semana (opcional)</div><div class="row" id="trDias"></div></div>
@@ -157,8 +185,13 @@ function turRapido() {
     $('#trOk', box).onclick = () => {
       const v = vals(box), a = Number(v.desde), b = Number(v.hasta); if (b <= a) return toast('La salida tiene que ser después de la entrada');
       const f = v.fecha || ui.turFecha, lista = [f, ...$$('#trDias input:checked', box).map((x) => x.dataset.d)];
-      lista.forEach((x) => agregarTurno(x, pid, a, b));
-      ui.turFecha = f; closeModal(); commit(); toast(`Turno cargado: ${persona(pid).nombre} ${hhmm(a)} a ${hhmm(b)}${lista.length > 1 ? ` en ${lista.length} días` : ''} ✔`);
+      const lid = v.local || localActivo();
+      lista.forEach((x) => agregarTurno(x, pid, a, b, lid));
+      if (multiLocal() && ui.turLocal !== '*' && lid !== localActivo()) ACTS.turLocal(lid);
+      ui.turFecha = f; closeModal(); commit();
+      const ch = choques(lista.reduce((m, x) => (x < m ? x : m)), lista.reduce((m, x) => (x > m ? x : m))).filter((c) => c.pid === pid && lista.includes(c.f));
+      if (ch.length) openModal(`<h3>⚠️ Ojo</h3><p>Se cargó el turno, pero <b>${esc(persona(pid).nombre)}</b> ya estaba en ${esc(localInfo(ch[0].l1 === lid ? ch[0].l2 : ch[0].l1).nombre)} a esa hora (${fmtDate(ch[0].f)}, de ${hhmm(ch[0].a)} a ${hhmm(ch[0].b)}). Revisá cuál de los dos va.</p><div class="modal-actions"><button class="pri" data-act="close">Entendido</button></div>`);
+      else toast(`Turno cargado: ${persona(pid).nombre} ${hhmm(a)} a ${hhmm(b)}${lista.length > 1 ? ` en ${lista.length} días` : ''}${multiLocal() ? ' en ' + localInfo(lid).nombre : ''} ✔`);
     };
   });
 }
@@ -168,17 +201,17 @@ function aMediaHora(d) { // pasa un día de casilleros de 1 hora a casilleros de
   for (const [k, v] of Object.entries(d.slots || {})) { const [l, m] = k.split('_').map(Number); for (let x = m; x < m + iv; x += 30) nuevo[`${l}_${x}`] = v; }
   d.slots = nuevo; d.intervalo = 30;
 }
-function agregarTurno(f, pid, a, b) { // pone a la persona en la primera columna libre de ese horario
-  const d = ensureDia(f);
+function agregarTurno(f, pid, a, b, lid = localActivo()) { // pone a la persona en la primera columna libre de ese horario
+  const d = ensureDia(f, lid);
   if (a % (d.intervalo || 60) || b % (d.intervalo || 60)) aMediaHora(d);
   const s = d.intervalo || 60, mins = []; for (let m = Math.floor(a / s) * s; m < b; m += s) mins.push(m);
   let lane = 0; while (lane < 40 && !mins.every((m) => !d.slots[`${lane}_${m}`] || d.slots[`${lane}_${m}`] === pid)) lane++;
   mins.forEach((m) => (d.slots[`${lane}_${m}`] = pid)); d.carriles = Math.max(d.carriles || 0, lane + 1); derivar(d);
 }
 function copiarDia(origen, destino) {
-  const o = diaDoc(origen); if (!o) return false; ensureSlots(o);
-  state.turnos = state.turnos.filter((t) => t.id !== destino);
-  state.turnos.push({ id: destino, fecha: destino, intervalo: o.intervalo, carriles: o.carriles, slots: JSON.parse(JSON.stringify(o.slots || {})), celdas: JSON.parse(JSON.stringify(o.celdas || {})), nota: '' });
+  const lid = localActivo(), o = diaDoc(origen, lid); if (!o) return false; ensureSlots(o);
+  state.turnos = state.turnos.filter((t) => !(t.fecha === destino && localDe(t) === lid));
+  state.turnos.push({ id: docId(destino, lid), fecha: destino, local: lid, intervalo: o.intervalo, carriles: o.carriles, slots: JSON.parse(JSON.stringify(o.slots || {})), celdas: JSON.parse(JSON.stringify(o.celdas || {})), nota: '' });
   return true;
 }
 
@@ -196,7 +229,7 @@ Object.assign(ACTS, {
     const go = () => { copiarDia(src, ui.turFecha); commit(); toast('Día copiado ✔'); };
     diaDoc(ui.turFecha) ? confirmBox(`Se van a reemplazar los turnos de este día por los del ${fmtDate(src)}.`, go, 'Reemplazar') : go();
   },
-  turLimpiar: () => { if (!diaDoc(ui.turFecha)) return toast('Este día ya está vacío'); confirmBox('Se van a borrar todos los turnos de este día.', () => { state.turnos = state.turnos.filter((t) => t.id !== ui.turFecha); commit(); }, 'Borrar'); },
+  turLimpiar: () => { if (!diaDoc(ui.turFecha)) return toast('Este día ya está vacío'); confirmBox('Se van a borrar todos los turnos de este día.', () => { const d = diaDoc(ui.turFecha); state.turnos = state.turnos.filter((t) => t !== d); commit(); }, 'Borrar'); },
   turCopiarSem: () => {
     const dias = semana(ui.turFecha), prev = dias.map((f) => addDays(f, -7));
     if (!prev.some(diaDoc)) return toast('La semana anterior no tiene turnos');
@@ -243,24 +276,28 @@ function paleta() {
 }
 
 function tCal() {
-  const v = ui.calVista, per = periodo(), editable = v !== 'anio';
+  const v = ui.calVista, per = periodo(), todos = verTodos(), editable = v !== 'anio' && !todos, lid = localActivo();
   const vistas = [['dia', 'Día'], ['semana', 'Semana'], ['mes', 'Mes'], ['anio', 'Año']];
-  const cuerpo = { dia: () => xlsGrid([ui.turFecha], true), semana: () => xlsGrid(semana(ui.turFecha), false), mes: xlsMes, anio: xlsAnio }[v]();
+  const grilla = (l, ed) => ({ dia: () => xlsGrid([ui.turFecha], true, l, ed), semana: () => xlsGrid(semana(ui.turFecha), false, l, ed), mes: () => xlsMes(l, ed), anio: () => xlsAnio(l) }[v]());
+  const cuerpo = !todos ? grilla(lid, true) : v === 'anio' ? xlsAnio('*')
+    : locales().map((l) => `<h2 class="loc-tit"><span class="sw" style="background:${l.color}"></span> ${esc(l.nombre)} <button class="sm no-print" data-act="turLocal" data-id="${l.id}">Editar este local</button></h2>${grilla(l.id, false)}`).join('');
   return `<div class="card no-print cal-barra" style="margin-bottom:10px"><div class="spread">
     <div class="tabs" style="margin:0">${vistas.map(([k, l]) => `<button class="${v === k ? 'on' : ''}" data-act="calVista" data-id="${k}">${l}</button>`).join('')}</div>
     <div class="row"><button data-act="calMov" data-id="-1">◀</button><b>${per.nombre}</b><button data-act="calMov" data-id="1">▶</button><button class="sm" data-act="turHoy">Hoy</button></div>
-    <div class="row"><button class="pri sm" data-act="turRapido">➕ Cargar turno</button>${v === 'dia' || v === 'semana' ? `<button class="sm" data-act="${v === 'dia' ? 'turCopiar' : 'turCopiarSem'}" ${v === 'dia' ? 'data-id="-7"' : ''}>Copiar ${v === 'dia' ? 'de la semana pasada' : 'semana anterior'}</button>` : ''}<button class="sm" data-act="turPrint">🖨 Imprimir</button>${editable ? `<label class="small row" style="gap:6px"><input type="checkbox" data-act="turPintarTog" ${ui.turPintar ? 'checked' : ''} style="width:auto"> Pintar</label>` : ''}</div></div>
-    ${editable ? `<div class="mt">${paleta()}</div><p class="small muted" style="margin:6px 0 0">Elegí a la persona arriba y tocá o arrastrá sobre cualquier cuadrado para ponerla ahí. Tocá un cuadrado que ya es suyo para sacarlo. Tocá la banda amarilla para escribir una nota del día.</p>` : '<p class="small muted" style="margin:8px 0 0">Tocá un día para abrirlo y editarlo.</p>'}</div>
-  <div class="print-title">${esc(state.config.negocio)} · Turnos · ${per.nombre}</div>
+    <div class="row">${todos ? '' : '<button class="pri sm" data-act="turRapido">➕ Cargar turno</button>'}${!todos && (v === 'dia' || v === 'semana') ? `<button class="sm" data-act="${v === 'dia' ? 'turCopiar' : 'turCopiarSem'}" ${v === 'dia' ? 'data-id="-7"' : ''}>Copiar ${v === 'dia' ? 'de la semana pasada' : 'semana anterior'}</button>` : ''}<button class="sm" data-act="turPrint">🖨 Imprimir</button>${editable ? `<label class="small row" style="gap:6px"><input type="checkbox" data-act="turPintarTog" ${ui.turPintar ? 'checked' : ''} style="width:auto"> Pintar</label>` : ''}</div></div>
+    ${todos ? '<p class="small muted" style="margin:8px 0 0">Estás viendo <b>todos los locales juntos</b>. Para cargar o pintar turnos, elegí un local arriba.</p>' : editable ? `<div class="mt">${paleta()}</div><p class="small muted" style="margin:6px 0 0">Elegí a la persona arriba y tocá o arrastrá sobre cualquier cuadrado para ponerla ahí. Tocá un cuadrado que ya es suyo para sacarlo. Tocá la banda amarilla para escribir una nota del día.</p>` : '<p class="small muted" style="margin:8px 0 0">Tocá un día para abrirlo y editarlo.</p>'}</div>
+  <div class="print-title">${esc(state.config.negocio)}${multiLocal() ? ' · ' + esc(todos ? 'Todos los locales' : localInfo(lid).nombre) : ''} · Turnos · ${per.nombre}</div>
+  ${avisoChoques(per)}
+  ${todos ? tablaLocales(per) : ''}
   ${cuerpo}
-  ${resumenPeriodo(per, v)}`;
+  ${resumenPeriodo(per, v, todos ? '*' : lid)}`;
 }
 
 // Planilla: una o varias filas de días (cada fila = una semana). Banda amarilla con número y nota,
 // nombre del día y columnas libres por día. null = casillero vacío (días que no son del mes).
-function xlsGrid(dias, grande) {
+function xlsGrid(dias, grande, lid = localActivo(), editable = true) {
   const filasDias = Array.isArray(dias[0]) ? dias : [dias];
-  const c = turCfg(), todos = filasDias.flat().filter(Boolean), docs = Object.fromEntries(todos.map((f) => [f, diaDoc(f)])), sl = Object.fromEntries(todos.map((f) => [f, slotsDia(docs[f])]));
+  const c = turCfg(), todos = filasDias.flat().filter(Boolean), docs = Object.fromEntries(todos.map((f) => [f, diaDoc(f, lid)])), sl = Object.fromEntries(todos.map((f) => [f, slotsDia(docs[f])]));
   const iv = Math.min(c.intervalo, ...todos.map((f) => docs[f]).filter(Boolean).map((d) => d.intervalo || 60));
   let ini = c.inicio * 60, fin = c.fin * 60;
   todos.forEach((f) => Object.keys(sl[f]).forEach((k) => { const m = Number(k.split('_')[1]); ini = Math.min(ini, m); fin = Math.max(fin, m + ((docs[f] && docs[f].intervalo) || iv)); }));
@@ -269,11 +306,11 @@ function xlsGrid(dias, grande) {
   const nCol = filasDias[0].length; // columnas iguales en todas las filas para que quede alineado como un calendario
   const lanes = Array.from({ length: nCol }, (_, i) => Math.max(c.columnas, ...filasDias.map((r) => (r[i] ? lanesDe(r[i]) : 0))));
   const val = (f, l, m) => { const d = docs[f]; if (!d) return ''; const div = d.intervalo || 60; return sl[f][`${l}_${m - (m % div)}`] || ''; };
-  let h = `<div class="xls-wrap"><table class="xls${ui.turPintar ? ' pintar' : ''}${grande ? '' : ' compacta'}">`;
+  let h = `<div class="xls-wrap"><table class="xls${ui.turPintar && editable ? ' pintar' : ''}${grande ? '' : ' compacta'}" data-lo="${lid}">`;
   filasDias.forEach((fila, r) => {
     const vacio = (i) => `<th class="xls-vacio" colspan="${lanes[i] + 1}"></th>`;
     h += `<tbody class="xls-sem${r ? ' xls-sem-sig' : ''}">
-    <tr>${fila.map((f, i) => (f ? `<th class="xls-num" colspan="${lanes[i] + 1}" data-act="turNota" data-id="${f}"><span>${parseD(f).getDate()}</span>${docs[f] && docs[f].nota ? `<em class="xls-nota">${esc(docs[f].nota)}</em>` : ''}</th>` : `<th class="xls-num xls-num-vacio" colspan="${lanes[i] + 1}"></th>`)).join('')}</tr>
+    <tr>${fila.map((f, i) => (f ? `<th class="xls-num" colspan="${lanes[i] + 1}"${editable ? ` data-act="turNota" data-id="${f}"` : ''}><span>${parseD(f).getDate()}</span>${docs[f] && docs[f].nota ? `<em class="xls-nota">${esc(docs[f].nota)}</em>` : ''}</th>` : `<th class="xls-num xls-num-vacio" colspan="${lanes[i] + 1}"></th>`)).join('')}</tr>
     <tr>${fila.map((f, i) => (f ? `<th class="xls-dia" colspan="${lanes[i] + 1}">${DIAS_UP[(parseD(f).getDay() + 6) % 7]}</th>` : vacio(i))).join('')}</tr>`;
     for (const m of horas) {
       h += '<tr>' + fila.map((f, i) => {
@@ -291,7 +328,7 @@ function xlsGrid(dias, grande) {
     h += `<tr class="xls-pie">${fila.map((f, i) => {
       if (!f) return `<td class="xls-fuera" colspan="${lanes[i] + 1}"></td>`;
       const d = docs[f], ppl = d ? Object.keys(d.celdas || {}).map(persona).filter(Boolean) : [];
-      return `<th class="xls-hora xls-sep">hs</th><th class="xls-tot" colspan="${lanes[i]}">${ppl.length ? ppl.map((p) => `<span style="color:${p.color}">■</span>${esc(grande ? p.nombre : p.nombre.slice(0, 3))} ${fmtNum(horasDia(f, p.id))}`).join(' · ') : ''}${grande ? ` <button class="sm link no-print" data-act="turMasCol" data-id="${f}">+ columna</button>` : ''}</th>`;
+      return `<th class="xls-hora xls-sep">hs</th><th class="xls-tot" colspan="${lanes[i]}">${ppl.length ? ppl.map((p) => `<span style="color:${p.color}">■</span>${esc(grande ? p.nombre : p.nombre.slice(0, 3))} ${fmtNum(horasDia(f, p.id, lid))}`).join(' · ') : ''}${grande && editable ? ` <button class="sm link no-print" data-act="turMasCol" data-id="${f}">+ columna</button>` : ''}</th>`;
     }).join('')}</tr></tbody>`;
   });
   return h + '</table></div>';
@@ -299,20 +336,20 @@ function xlsGrid(dias, grande) {
 
 // Mes: como un calendario real. Filas de 7 días (lunes a domingo); el día 1 cae en su día de la semana
 // y los casilleros de antes y después del mes quedan vacíos.
-function xlsMes() {
+function xlsMes(lid = localActivo(), editable = true) {
   const d = parseD(ui.turFecha), Y = d.getFullYear(), M = d.getMonth(), nd = new Date(Y, M + 1, 0).getDate();
   const off = (new Date(Y, M, 1).getDay() + 6) % 7, celdas = [];
   for (let i = 0; i < off; i++) celdas.push(null);
   for (let k = 1; k <= nd; k++) celdas.push(ymd(new Date(Y, M, k)));
   while (celdas.length % 7) celdas.push(null);
   const filas = []; for (let i = 0; i < celdas.length; i += 7) filas.push(celdas.slice(i, i + 7));
-  return `<div class="xls-mestit">${MESES[M].toUpperCase()} ${Y}</div>${xlsGrid(filas, false)}`;
+  return `<div class="xls-mestit">${MESES[M].toUpperCase()} ${Y}</div>${xlsGrid(filas, false, lid, editable)}`;
 }
 
 // Pintar casilleros: tocar o arrastrar con la persona elegida
 let pinta = null;
 function aplicar(td) {
-  const f = td.dataset.f, d = ensureDia(f), div = d.intervalo || 60, m0 = Number(td.dataset.m), key = `${td.dataset.l}_${m0 - (m0 % div)}`;
+  const f = td.dataset.f, d = ensureDia(f, td.closest('table').dataset.lo || localActivo()), div = d.intervalo || 60, m0 = Number(td.dataset.m), key = `${td.dataset.l}_${m0 - (m0 % div)}`;
   if (pinta.modo === 'borrar') delete d.slots[key]; else d.slots[key] = pinta.valor;
   if (Number(td.dataset.l) + 1 > (d.carriles || 0)) d.carriles = Number(td.dataset.l) + 1;
   pinta.dias.add(d);
@@ -358,25 +395,26 @@ function textoForm() {
   });
 }
 // Año: 12 meses chicos; cada día muestra los colores de quienes trabajaron
-function xlsAnio() {
+function xlsAnio(lid = localActivo()) {
   const Y = parseD(ui.turFecha).getFullYear();
   return `<div class="xls-anio">${MESES.map((mn, M) => {
     const first = new Date(Y, M, 1), off = (first.getDay() + 6) % 7, nd = new Date(Y, M + 1, 0).getDate();
     let cells = ''; for (let i = 0; i < off; i++) cells += '<td></td>';
     for (let day = 1; day <= nd; day++) {
-      const f = ymd(new Date(Y, M, day)), doc = diaDoc(f);
-      const ppl = doc ? state.personal.filter((p) => ((doc.celdas || {})[p.id] || []).length) : [];
+      const f = ymd(new Date(Y, M, day)), docs = state.turnos.filter((t) => t.fecha === f && enLocal(t, lid));
+      const ppl = state.personal.filter((p) => docs.some((doc) => ((doc.celdas || {})[p.id] || []).length));
       cells += `<td class="xls-adia${f === todayStr() ? ' hoy' : ''}" data-act="calIrDia" data-id="${f}" title="${ppl.map((p) => p.nombre).join(', ')}"><span>${day}</span><div class="xls-barras">${ppl.map((p) => `<i style="background:${p.color}"></i>`).join('')}</div></td>`;
       if ((off + day) % 7 === 0) cells += '</tr><tr>';
     }
-    const horasMes = state.personal.reduce((s, p) => s + horasRango(p.id, ymd(first), ymd(new Date(Y, M, nd))), 0);
+    const horasMes = state.personal.reduce((s, p) => s + horasRango(p.id, ymd(first), ymd(new Date(Y, M, nd)), lid), 0);
     return `<div class="xls-ames"><table class="xls"><thead><tr><th class="xls-num xls-anum" colspan="7" data-act="calIrMes" data-id="${ymd(first)}">${mn.toUpperCase()}</th></tr><tr>${['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((x) => `<th class="xls-dia">${x}</th>`).join('')}</tr></thead><tbody><tr>${cells}</tr></tbody></table><div class="small muted" style="text-align:center;margin-top:3px">${horasMes ? fmtH(horasMes) + ' en total' : 'sin turnos'}</div></div>`;
   }).join('')}</div>`;
 }
 
 // Resumen del período que se está viendo
-function resumenPeriodo(per, v) {
+function resumenPeriodo(per, v, lid = '*') {
   const lista = state.personal.filter((p) => p.activo !== false || horasRango(p.id, per.desde, per.hasta));
+  const hayCat = catEquipo(per.desde, per.hasta).length > 0, porLocal = lid !== '*' && (multiLocal() || hayCat), ln = porLocal ? localInfo(lid).nombre : '';
   if (!lista.length) return '';
   const nDias = daysBetween(per.desde, per.hasta) + 1, hoy = todayStr();
   // si el período todavía no terminó, la meta se cuenta solo hasta hoy
@@ -384,20 +422,21 @@ function resumenPeriodo(per, v) {
   const parcial = transc < nDias, factor = transc / nDias;
   const art = { 'día': 'del día', semana: 'de la semana', mes: 'del mes', 'año': 'del año' }[per.plazo];
   const filas = lista.map((p) => {
-    const h = horasRango(p.id, per.desde, per.hasta), meta = v === 'dia' && !h ? 0 : Math.round(metaPeriodo(p, v) * factor * 10) / 10, dif = Math.round((h - meta) * 10) / 10, dt = diasTrabajados(p.id, per.desde, per.hasta);
+    const h = horasRango(p.id, per.desde, per.hasta), hl = porLocal ? horasRango(p.id, per.desde, per.hasta, lid) : h, meta = v === 'dia' && !h ? 0 : Math.round(metaPeriodo(p, v) * factor * 10) / 10, dif = Math.round((h - meta) * 10) / 10, dt = diasTrabajados(p.id, per.desde, per.hasta);
     let frase;
     if (v === 'dia' && !h) frase = `${esc(p.nombre)} no trabajó este día (franco).`;
     else if (!meta) frase = `${esc(p.nombre)} trabajó ${fmtH(h)} en ${dt} día${dt === 1 ? '' : 's'}. No tiene meta cargada para este plazo.`;
     else if (dif > 0) frase = `${esc(p.nombre)} trabajó ${fmtH(h)}: hizo <b>${fmtH(dif)} de más</b> sobre su meta de ${fmtH(meta)} ${parcial ? 'hasta hoy' : 'por ' + per.plazo}.`;
     else if (dif < 0) frase = `${esc(p.nombre)} trabajó ${fmtH(h)}: ${parcial ? 'va' : 'quedó'} <b>${fmtH(-dif)} abajo</b> de su meta de ${fmtH(meta)} ${parcial ? 'hasta hoy' : 'por ' + per.plazo}.`;
     else frase = `${esc(p.nombre)} trabajó ${fmtH(h)}: cumplió justo su meta de ${fmtH(meta)} ${parcial ? 'hasta hoy' : 'por ' + per.plazo}.`;
-    return { p, h, meta, dif, dt, frase };
+    if (porLocal && h && hl !== h) frase += ` De esas, ${fmtH(hl)} fueron en ${esc(ln)}.`;
+    return { p, h, hl, meta, dif, dt, frase };
   });
-  const tot = filas.reduce((s, r) => s + r.h, 0);
+  const tot = filas.reduce((s, r) => s + r.h, 0), totL = filas.reduce((s, r) => s + r.hl, 0);
   return `<h2>Resumen · ${per.nombre} <span class="muted small" style="font-weight:400">(plazo: ${per.plazo}, ${nDias} día${nDias === 1 ? '' : 's'}${parcial ? `; la meta se cuenta hasta hoy, ${transc} de ${nDias} días` : ''})</span></h2>
-  <div class="tablewrap"><table class="xls-res"><thead><tr><th>Empleado</th><th class="num">Horas trabajadas</th><th class="num">Meta ${art}${parcial ? ' (hasta hoy)' : ''}</th><th class="num">De más / de menos</th><th class="num">Días trabajados</th><th>Detalle</th></tr></thead><tbody>
-  ${filas.map((r) => `<tr><td><span class="xls-nom" style="background:${r.p.color};color:${textoSobre(r.p.color)}">${esc(r.p.nombre.toUpperCase())}</span></td><td class="num"><b>${fmtH(r.h)}</b></td><td class="num">${r.meta ? fmtH(r.meta) : '–'}</td><td class="num">${!r.meta ? '–' : r.dif > 0 ? `<b class="c-in">+${fmtH(r.dif)} de más</b>` : r.dif < 0 ? `<b class="c-out">−${fmtH(-r.dif)} de menos</b>` : '<b>justo</b>'}</td><td class="num">${r.dt}</td><td class="small">${r.frase}</td></tr>`).join('')}
-  <tr><td><b>TOTAL</b></td><td class="num"><b>${fmtH(tot)}</b></td><td></td><td></td><td></td><td></td></tr></tbody></table></div>`;
+  <div class="tablewrap"><table class="xls-res"><thead><tr><th>Empleado</th>${porLocal ? `<th class="num">En ${esc(ln)}</th>` : ''}<th class="num">Horas trabajadas${multiLocal() ? ` (todos los locales${hayCat ? ' y catering' : ''})` : hayCat ? ' (con catering)' : ''}</th><th class="num">Meta ${art}${parcial ? ' (hasta hoy)' : ''}</th><th class="num">De más / de menos</th><th class="num">Días trabajados</th><th>Detalle</th></tr></thead><tbody>
+  ${filas.map((r) => `<tr><td><span class="xls-nom" style="background:${r.p.color};color:${textoSobre(r.p.color)}">${esc(r.p.nombre.toUpperCase())}</span></td>${porLocal ? `<td class="num">${fmtH(r.hl)}</td>` : ''}<td class="num"><b>${fmtH(r.h)}</b></td><td class="num">${r.meta ? fmtH(r.meta) : '–'}</td><td class="num">${!r.meta ? '–' : r.dif > 0 ? `<b class="c-in">+${fmtH(r.dif)} de más</b>` : r.dif < 0 ? `<b class="c-out">−${fmtH(-r.dif)} de menos</b>` : '<b>justo</b>'}</td><td class="num">${r.dt}</td><td class="small">${r.frase}</td></tr>`).join('')}
+  <tr><td><b>TOTAL</b></td>${porLocal ? `<td class="num"><b>${fmtH(totL)}</b></td>` : ''}<td class="num"><b>${fmtH(tot)}</b></td><td></td><td></td><td></td><td></td></tr></tbody></table></div>`;
 }
 
 Object.assign(ACTS, {
@@ -409,4 +448,76 @@ Object.assign(ACTS, {
   pincelTexto: textoForm,
   turNota: (f) => notaForm(f),
   turMasCol: (f) => { const d = ensureDia(f); d.carriles = Math.max(d.carriles || 0, turCfg().columnas) + 1; commit(); },
+});
+
+// ================= Locales =================
+function selectorLocal() {
+  const ls = locales(), cur = verTodos() ? '*' : localActivo();
+  return `<div class="locales no-print"><span class="small muted">Local:</span>${ls.map((l) => `<button class="loc${cur === l.id ? ' sel' : ''}" data-act="turLocal" data-id="${l.id}" style="--lc:${l.color}">🏪 ${esc(l.nombre)}</button>`).join('')}${ls.length > 1 ? `<button class="loc${cur === '*' ? ' sel' : ''}" data-act="turLocal" data-id="*" style="--lc:#37474f">Todos juntos</button>` : ''}<button class="sm link" data-act="locNew">+ Agregar local</button></div>`;
+}
+// Alguien anotado en dos locales a la misma hora
+function choques(desde, hasta) {
+  const porDia = {}, add = (f, x) => (porDia[f] || (porDia[f] = [])).push(x);
+  state.turnos.forEach((t) => { if (t.fecha >= desde && t.fecha <= hasta) Object.keys(t.celdas || {}).forEach((pid) => rango(t.celdas[pid] || [], t.intervalo || 60).forEach(([a, b]) => add(t.fecha, { pid, a, b, lid: localDe(t) }))); });
+  catEquipo(desde, hasta).forEach((e) => add(e.fecha, { pid: e.pid, a: e.desde, b: e.hasta, lid: CATER.id }));
+  const out = [];
+  for (const [f, todos] of Object.entries(porDia)) {
+    for (const pid of new Set(todos.map((x) => x.pid))) {
+      const tr = todos.filter((x) => x.pid === pid);
+      for (let i = 0; i < tr.length; i++) for (let j = i + 1; j < tr.length; j++) {
+        const x = tr[i], y = tr[j];
+        if (x.lid !== y.lid && x.a < y.b && y.a < x.b) out.push({ f, pid, l1: x.lid, l2: y.lid, a: Math.max(x.a, y.a), b: Math.min(x.b, y.b) });
+      }
+    }
+  }
+  return out.sort((a, b) => a.f.localeCompare(b.f) || a.a - b.a);
+}
+function avisoChoques(per) {
+  const ch = choques(per.desde, per.hasta).filter((c) => persona(c.pid));
+  if (!ch.length) return '';
+  return `<div class="card aviso-choque"><b>⚠️ Hay ${ch.length === 1 ? 'una persona anotada' : 'personas anotadas'} en dos locales a la misma hora:</b><ul>${ch.slice(0, 12).map((c) => `<li><b>${esc(persona(c.pid).nombre)}</b>, ${DIAS[(parseD(c.f).getDay() + 6) % 7].toLowerCase()} ${fmtDate(c.f)} de ${hhmm(c.a)} a ${hhmm(c.b)}: en <b>${esc(localInfo(c.l1).nombre)}</b> y en <b>${esc(localInfo(c.l2).nombre)}</b>. <button class="sm link" data-act="turIrChoque" data-id="${c.f}|${c.l1}">Ver</button></li>`).join('')}</ul>${ch.length > 12 ? `<div class="small muted">y ${ch.length - 12} más.</div>` : ''}</div>`;
+}
+// Comparación de horas por local en el período
+function tablaLocales(per) {
+  const ls = lugaresHoras(per.desde, per.hasta), ppl = state.personal.filter((p) => horasRango(p.id, per.desde, per.hasta));
+  if (!ppl.length) return `<div class="card empty" style="margin-bottom:12px">No hay turnos cargados en ningún local para este período.</div>`;
+  const totL = ls.map((l) => ppl.reduce((s, p) => s + horasRango(p.id, per.desde, per.hasta, l.id), 0));
+  return `<h2>Horas por local · ${per.nombre}</h2><div class="tablewrap" style="margin-bottom:12px"><table class="xls-res"><thead><tr><th>Empleado</th>${ls.map((l) => `<th class="num"><span class="sw" style="background:${l.color}"></span> ${esc(l.nombre)}</th>`).join('')}<th class="num">Total</th></tr></thead><tbody>
+  ${ppl.map((p) => `<tr><td><span class="xls-nom" style="background:${p.color};color:${textoSobre(p.color)}">${esc(p.nombre.toUpperCase())}</span></td>${ls.map((l) => { const h = horasRango(p.id, per.desde, per.hasta, l.id); return `<td class="num">${h ? fmtH(h) : '–'}</td>`; }).join('')}<td class="num"><b>${fmtH(horasRango(p.id, per.desde, per.hasta))}</b></td></tr>`).join('')}
+  <tr><td><b>TOTAL</b></td>${totL.map((h) => `<td class="num"><b>${fmtH(h)}</b></td>`).join('')}<td class="num"><b>${fmtH(totL.reduce((a, b) => a + b, 0))}</b></td></tr></tbody></table></div>`;
+}
+function locForm(l) {
+  const isNew = !l, ls = locales();
+  l = l || { nombre: '', color: LCOLORES[ls.length % LCOLORES.length] };
+  let color = l.color;
+  const nDias = isNew ? 0 : state.turnos.filter((t) => localDe(t) === l.id).length;
+  openModal(`<h3>${isNew ? 'Agregar local' : 'Editar local'}</h3><div class="form">
+    <label class="f full">Nombre del local *<input name="nombre" value="${esc(l.nombre)}" placeholder="Ej: Di Nardi Triana"></label>
+    <div class="full"><div class="small muted" style="margin-bottom:6px">Color</div><div class="colores">${LCOLORES.map((c) => `<button type="button" class="col${c === color ? ' sel' : ''}" data-c="${c}" style="background:${c}"></button>`).join('')}<label class="col otro" title="Otro color"><input type="color" id="locColor" value="${color}"></label></div></div>
+  </div>${isNew && ls.length === 1 && ls[0].nombre === 'Local 1' ? '<p class="small muted">Los turnos que ya estaban cargados quedan en "Local 1". Podés cambiarle el nombre desde Personal → Locales.</p>' : ''}
+  <div class="modal-actions">${!isNew && ls.length > 1 ? '<button class="danger" id="locDel">Eliminar</button>' : ''}<button data-act="close">Cancelar</button><button class="pri" id="locOk">Guardar</button></div>`, (box) => {
+    const setC = (c) => { color = c; $$('.col', box).forEach((b) => b.classList.toggle('sel', b.dataset.c === c)); };
+    $('.colores', box).onclick = (e) => { const b = e.target.closest('button.col'); if (b) setC(b.dataset.c); };
+    $('#locColor', box).oninput = (e) => setC(e.target.value);
+    const del = $('#locDel', box);
+    if (del) del.onclick = () => confirmBox(`Se va a eliminar el local <b>${esc(l.nombre)}</b>${nDias ? ` <b>y sus ${nDias} día${nDias === 1 ? '' : 's'} de turnos cargados</b>` : ''}. El personal no se borra.`, () => {
+      state.config.locales = locales().filter((x) => x.id !== l.id);
+      state.turnos = state.turnos.filter((t) => localDe(t) !== l.id);
+      if (ui.turLocal === l.id) ACTS.turLocal(locales()[0].id);
+      commit();
+    }, 'Eliminar');
+    $('#locOk', box).onclick = () => {
+      const nombre = $('[name=nombre]', box).value.trim(); if (!nombre) return toast('Poné el nombre del local');
+      const lista = locales().map((x) => ({ ...x }));
+      if (isNew) { const nuevo = { id: uid(), nombre, color }; lista.push(nuevo); state.config.locales = lista; ui.turLocal = nuevo.id; try { localStorage.setItem('turLocal', nuevo.id); } catch {} }
+      else { const x = lista.find((y) => y.id === l.id); if (x) Object.assign(x, { nombre, color }); else lista.push({ id: l.id, nombre, color }); state.config.locales = lista; }
+      closeModal(); commit(); toast('Local guardado ✔');
+    };
+  });
+}
+Object.assign(ACTS, {
+  turLocal: (id) => { ui.turLocal = id; try { localStorage.setItem('turLocal', id); } catch {} render(); },
+  turIrChoque: (x) => { const [f, l] = String(x).split('|'); if (l === CATER.id) return go('catering'); ui.turFecha = f; ui.calVista = 'dia'; ACTS.turLocal(l); window.scrollTo(0, 0); },
+  locNew: () => locForm(),
+  locEdit: (id) => locForm(localInfo(id)),
 });
