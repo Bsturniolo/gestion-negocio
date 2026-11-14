@@ -56,8 +56,8 @@ const TIPOS_EV = {
 
 const EMPTY = () => ({
   version: 1,
-  config: { negocio: 'Mi Negocio', moneda: '$', avisoDias: 3, ultimoRespaldo: null },
-  productos: [], proveedores: [], movimientos: [], stockMovs: [], eventos: [],
+  config: { negocio: 'Mi Negocio', moneda: '$', avisoDias: 3, ultimoRespaldo: null, turnos: { inicio: 6, fin: 22, intervalo: 60 } },
+  productos: [], proveedores: [], movimientos: [], stockMovs: [], eventos: [], personal: [], turnos: [],
 });
 let state = EMPTY();
 
@@ -96,7 +96,7 @@ const prod = (id) => state.productos.find((p) => p.id === id);
 
 // ---------- Nube (Firebase) ----------
 const cloud = { cfg: null, uid: null, email: '', live: false, synced: {}, buffer: {}, reported: new Set(), unsub: null, pending: false, error: '', deferred: {} };
-const COLS = ['productos', 'proveedores', 'movimientos', 'stockMovs', 'eventos'];
+const COLS = ['productos', 'proveedores', 'movimientos', 'stockMovs', 'eventos', 'personal', 'turnos'];
 function stable(v) { // JSON con claves ordenadas, para comparar registros
   if (Array.isArray(v)) return '[' + v.map(stable).join(',') + ']';
   if (v && typeof v === 'object') return '{' + Object.keys(v).filter((k) => v[k] !== undefined).sort().map((k) => JSON.stringify(k) + ':' + stable(v[k])).join(',') + '}';
@@ -232,7 +232,7 @@ function render() {
   document.body.classList.toggle('login', !!needLogin());
   syncBadge();
   if (needLogin()) { $('#main').innerHTML = vLogin(); const pw = $('#lgPass'); if (pw) pw.onkeydown = (e) => { if (e.key === 'Enter') ACTS.lgGo(); }; return; }
-  const fn = { inicio: vInicio, productos: vProductos, proveedores: vProveedores, finanzas: vFinanzas, balance: vBalance, calendario: vCalendario, ajustes: vAjustes }[view];
+  const fn = { inicio: vInicio, productos: vProductos, proveedores: vProveedores, finanzas: vFinanzas, balance: vBalance, calendario: vCalendario, turnos: vTurnos, ajustes: vAjustes }[view];
   $('#main').innerHTML = fn();
   bindView();
 }
@@ -819,7 +819,7 @@ function notificar() {
   if (Notification.permission === 'granted') send(); else if (Notification.permission !== 'denied') Notification.requestPermission().then((p) => p === 'granted' && send());
 }
 
-(async function init() {
+window.addEventListener('DOMContentLoaded', async function init() {
   await load();
   startCloud();
   render();
@@ -827,4 +827,4 @@ function notificar() {
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
   // si la app queda abierta, revisar avisos al cambiar de día
   let dia = todayStr(); setInterval(() => { if (todayStr() !== dia) { dia = todayStr(); render(); notificar(); } }, 60000);
-})();
+});
