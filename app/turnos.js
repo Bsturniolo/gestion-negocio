@@ -4,7 +4,7 @@
 
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 const COLORES = ['#e53935', '#fb8c00', '#fdd835', '#7cb342', '#2e7d32', '#00897b', '#1e88e5', '#3949ab', '#8e24aa', '#d81b60', '#6d4c41', '#546e7a', '#f06292', '#9ccc65', '#4dd0e1', '#ffb74d'];
-Object.assign(ui, { calVista: 'semana', turTab: 'cal', turFecha: todayStr(), turMes: todayStr().slice(0, 7), turPintar: true });
+Object.assign(ui, { pincel: '', calVista: 'semana', turTab: 'cal', turFecha: todayStr(), turMes: todayStr().slice(0, 7), turPintar: true });
 
 const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 const toMin = (s) => { const [h, m] = String(s || '0:0').split(':').map(Number); return (h || 0) * 60 + (m || 0); };
@@ -12,7 +12,7 @@ const fmtH = (h) => fmtNum(Math.round(h * 10) / 10) + ' h';
 const lunes = (f) => { const d = parseD(f); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return ymd(d); };
 const addDays = (f, k) => { const d = parseD(f); d.setDate(d.getDate() + k); return ymd(d); };
 const semana = (f) => { const l = lunes(f); return [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(l, i)); };
-const turCfg = () => Object.assign({ inicio: 6, fin: 22, intervalo: 60 }, state.config.turnos || {});
+const turCfg = () => Object.assign({ inicio: 6, fin: 22, intervalo: 60, columnas: 8 }, state.config.turnos || {});
 const persona = (id) => state.personal.find((p) => p.id === id);
 const activos = () => state.personal.filter((p) => p.activo !== false).sort((a, b) => (a.orden || 0) - (b.orden || 0) || a.nombre.localeCompare(b.nombre));
 const diaDoc = (f) => state.turnos.find((t) => t.id === f);
@@ -38,108 +38,38 @@ function gente(f) { // activos + quien tenga horas ese día aunque esté inactiv
 }
 function ensureDia(f) {
   let d = diaDoc(f);
-  if (!d) { d = { id: f, fecha: f, intervalo: turCfg().intervalo, celdas: {}, nota: '' }; state.turnos.push(d); }
+  if (!d) { d = { id: f, fecha: f, intervalo: turCfg().intervalo, carriles: turCfg().columnas, slots: {}, celdas: {}, nota: '' }; state.turnos.push(d); }
+  ensureSlots(d);
   return d;
 }
-function limpiarVacios() { state.turnos = state.turnos.filter((t) => Object.values(t.celdas || {}).some((a) => a.length) || t.nota); }
+// Cada día guarda sus casilleros libres en "slots": clave "columna_minuto" → id de persona, o "t:texto".
+// "celdas" (persona → minutos) se recalcula de los casilleros y es lo que usan los conteos de horas.
+function ensureSlots(d) {
+  if (d.slots) return d;
+  d.slots = {}; let lane = 0;
+  Object.keys(d.celdas || {}).filter((pid) => (d.celdas[pid] || []).length).sort((a, b) => ((persona(a) || {}).orden || 0) - ((persona(b) || {}).orden || 0)).forEach((pid) => { d.celdas[pid].forEach((m) => (d.slots[`${lane}_${m}`] = pid)); lane++; });
+  d.carriles = Math.max(turCfg().columnas, lane);
+  return d;
+}
+function derivar(d) {
+  const c = {};
+  for (const [k, v] of Object.entries(d.slots || {})) { if (!v || v.startsWith('t:')) continue; const m = Number(k.split('_')[1]); (c[v] || (c[v] = new Set())).add(m); }
+  d.celdas = Object.fromEntries(Object.entries(c).map(([pid, set]) => [pid, [...set].sort((a, b) => a - b)]));
+}
+const slotsDia = (d) => (d ? (d.slots ? d.slots : ensureSlots(JSON.parse(JSON.stringify(d))).slots) : {});
+function limpiarVacios() { state.turnos = state.turnos.filter((t) => Object.values(t.slots || {}).some(Boolean) || Object.values(t.celdas || {}).some((a) => a.length) || t.nota); }
 const difBadge = (h, meta) => {
   if (!meta) return '<span class="badge gray">Sin meta</span>';
   const d = Math.round((h - meta) * 10) / 10;
   return d >= 0 ? `<span class="badge in">Cumplió${d > 0 ? ' +' + fmtH(d) : ''}</span>` : `<span class="badge out">Debe ${fmtH(-d)}</span>`;
 };
 
-// ---------- Grilla de un día ----------
-function grilla(f, compact) {
-  const ppl = gente(f), { iv, slots } = slotsDe(f), d = diaDoc(f), cel = (d && d.celdas) || {};
-  if (!ppl.length) return `<div class="card empty">Primero cargá el personal en la pestaña <b>Personal</b>.</div>`;
-  const sets = Object.fromEntries(ppl.map((p) => [p.id, new Set(cel[p.id] || [])]));
-  const body = slots.map((m) => `<tr><th class="tg-h">${hhmm(m)}</th>${ppl.map((p) => {
-    const on = sets[p.id].has(m);
-    let letra = '';
-    if (on) { let k = 0; for (let x = m - iv; sets[p.id].has(x); x -= iv) k++; const n = p.nombre.toUpperCase(); letra = n[k] || ''; }
-    return `<td class="tg-c${on ? ' on' : ''}" data-p="${p.id}" data-m="${m}" data-f="${f}" style="${on ? `background:${p.color};color:${textoSobre(p.color)}` : ''}">${compact ? '' : esc(letra)}</td>`;
-  }).join('')}</tr>`).join('');
-  return `<div class="tg-wrap${compact ? ' compact' : ''}"><table class="tg${ui.turPintar ? ' pintar' : ''}" data-iv="${iv}">
-    <thead><tr><th class="tg-h"></th>${ppl.map((p) => `<th class="tg-p" title="${esc(p.nombre)}"><span class="sw" style="background:${p.color}"></span>${esc(compact ? p.nombre.slice(0, 3) : p.nombre)}</th>`).join('')}</tr></thead>
-    <tbody>${body}</tbody>
-    <tfoot><tr><th class="tg-h">Horas</th>${ppl.map((p) => `<th>${fmtNum(horasDia(f, p.id))}</th>`).join('')}</tr></tfoot></table></div>`;
-}
-
-// pintar arrastrando (mouse y dedo)
-let paint = null;
-document.addEventListener('pointerdown', (e) => {
-  const td = e.target.closest('table.pintar td.tg-c'); if (!td || e.button > 0) return;
-  e.preventDefault();
-  const d = ensureDia(td.dataset.f);
-  paint = { f: td.dataset.f, pid: td.dataset.p, add: !td.classList.contains('on'), d, iv: Number(td.closest('table').dataset.iv) };
-  paintCell(td);
-});
-document.addEventListener('pointermove', (e) => {
-  if (!paint) return;
-  const el = document.elementFromPoint(e.clientX, e.clientY); const td = el && el.closest && el.closest('td.tg-c');
-  if (td && td.dataset.f === paint.f && td.dataset.p === paint.pid) paintCell(td);
-});
-['pointerup', 'pointercancel'].forEach((ev) => document.addEventListener(ev, () => { if (!paint) return; paint = null; limpiarVacios(); commit(); }));
-function paintCell(td) {
-  const ivD = paint.d.intervalo || 60, m0 = Number(td.dataset.m), m = m0 - (m0 % ivD), arr = paint.d.celdas[paint.pid] || (paint.d.celdas[paint.pid] = []), i = arr.indexOf(m);
-  if (paint.add && i < 0) arr.push(m); else if (!paint.add && i >= 0) arr.splice(i, 1);
-  arr.sort((a, b) => a - b);
-  const p = persona(paint.pid); td.classList.toggle('on', paint.add);
-  td.style.background = paint.add ? p.color : ''; td.style.color = paint.add ? textoSobre(p.color) : '';
-}
-
 // ---------- Vistas ----------
 function vTurnos() {
-  const tabs = [['cal', '📅 Calendario'], ['dia', '📋 Día'], ['semana', '🗓 Semana'], ['mes', '📈 Rendimiento'], ['personal', '👤 Personal']];
-  const fn = { cal: tCal, dia: tDia, semana: tSemana, mes: tMes, personal: tPersonal }[ui.turTab];
+  const tabs = [['cal', '📅 Calendario'], ['mes', '📈 Rendimiento'], ['personal', '👤 Personal']];
+  const fn = { cal: tCal, mes: tMes, personal: tPersonal }[ui.turTab] || tCal;
   return `<div class="spread"><div><h1>Turnos del personal</h1><p class="sub">Planilla por día, conteo de horas y metas.</p></div></div>
   <div class="tabs">${tabs.map(([k, l]) => `<button class="${ui.turTab === k ? 'on' : ''}" data-act="turTab" data-id="${k}">${l}</button>`).join('')}</div>${fn()}`;
-}
-
-function tDia() {
-  const f = ui.turFecha, d = parseD(f), dow = (d.getDay() + 6) % 7;
-  const ppl = gente(f), tot = ppl.reduce((s, p) => s + horasDia(f, p.id), 0);
-  return `<div class="card" style="margin-bottom:12px"><div class="spread">
-    <div class="row"><button data-act="turDia" data-id="-1">◀</button><input type="date" data-bind="turFecha" value="${f}" style="width:auto"><button data-act="turDia" data-id="1">▶</button><button class="sm" data-act="turHoy">Hoy</button></div>
-    <b style="font-size:17px">${DIAS[dow]} ${d.getDate()} de ${MESES[d.getMonth()]}</b></div>
-    <div class="row mt">
-      <button class="pri" data-act="turRapido">➕ Cargar turno (de … a …)</button>
-      <button data-act="turCopiar" data-id="-1">Copiar del día anterior</button>
-      <button data-act="turCopiar" data-id="-7">Copiar del ${DIAS[dow].toLowerCase()} pasado</button>
-      <button class="danger" data-act="turLimpiar">Borrar día</button>
-      <label class="small row" style="gap:6px;margin-left:auto"><input type="checkbox" data-act="turPintarTog" ${ui.turPintar ? 'checked' : ''} style="width:auto"> Pintar tocando la grilla</label>
-    </div>
-    <p class="small muted" style="margin:10px 0 0">${ui.turPintar ? 'Tocá o arrastrá sobre la columna de cada persona para marcar sus horas. Tocá una hora pintada para borrarla.' : 'Modo ver: la grilla no se modifica al tocarla (útil en el celular para desplazarse).'} Total del día: <b>${fmtH(tot)}</b>.</p>
-  </div>${grilla(f)}`;
-}
-
-function tSemana() {
-  const dias = semana(ui.turFecha), ppl = activos();
-  const extra = state.personal.filter((p) => p.activo === false && dias.some((f) => horasDia(f, p.id)));
-  const lista = [...ppl, ...extra];
-  const [d0, d6] = [parseD(dias[0]), parseD(dias[6])];
-  return `<div class="card no-print" style="margin-bottom:12px"><div class="spread">
-    <div class="row"><button data-act="turSem" data-id="-7">◀</button><b>Semana del ${d0.getDate()}/${d0.getMonth() + 1} al ${d6.getDate()}/${d6.getMonth() + 1}/${d6.getFullYear()}</b><button data-act="turSem" data-id="7">▶</button><button class="sm" data-act="turHoy">Esta semana</button></div>
-    <div class="row"><button data-act="turCopiarSem">Copiar semana anterior</button><button data-act="turPrint">🖨 Imprimir planilla</button></div></div>
-    <p class="small muted" style="margin:8px 0 0">Tocá el título de un día para editarlo.</p></div>
-  <div class="print-title">${esc(state.config.negocio)} · Turnos del ${d0.getDate()}/${d0.getMonth() + 1} al ${d6.getDate()}/${d6.getMonth() + 1}/${d6.getFullYear()}</div>
-  <div class="semana">${dias.map((f, i) => `<div class="sem-dia"><div class="sem-tit" data-act="turAbrir" data-id="${f}">${DIAS[i]} ${parseD(f).getDate()}</div>${lista.length ? grillaSemana(f, lista) : ''}</div>`).join('')}</div>
-  <h2>Horas de la semana</h2>
-  ${lista.length ? `<div class="tablewrap"><table><thead><tr><th>Persona</th>${dias.map((f, i) => `<th class="num">${DIAS[i].slice(0, 3)} ${parseD(f).getDate()}</th>`).join('')}<th class="num">Total</th><th class="num">Meta</th><th>Estado</th></tr></thead><tbody>
-  ${lista.map((p) => { const t = horasRango(p.id, dias[0], dias[6]); return `<tr><td><span class="sw" style="background:${p.color}"></span> <b>${esc(p.nombre)}</b></td>${dias.map((f) => { const h = horasDia(f, p.id); return `<td class="num ${h ? '' : 'muted'}">${h ? fmtNum(h) : '–'}</td>`; }).join('')}<td class="num"><b>${fmtH(t)}</b></td><td class="num">${p.metaSemanal ? fmtH(p.metaSemanal) : '–'}</td><td>${difBadge(t, p.metaSemanal)}</td></tr>`; }).join('')}
-  <tr><td><b>Total</b></td>${dias.map((f) => `<td class="num"><b>${fmtNum(lista.reduce((s, p) => s + horasDia(f, p.id), 0))}</b></td>`).join('')}<td class="num"><b>${fmtH(lista.reduce((s, p) => s + horasRango(p.id, dias[0], dias[6]), 0))}</b></td><td></td><td></td></tr>
-  </tbody></table></div>` : '<div class="card empty">Cargá el personal en la pestaña <b>Personal</b>.</div>'}`;
-}
-function grillaSemana(f, lista) { // versión chica, solo lectura, con nombre en vertical como la planilla en papel
-  const { iv, slots } = slotsDe(f), d = diaDoc(f), cel = (d && d.celdas) || {};
-  const ppl = lista.filter((p) => (cel[p.id] || []).length);
-  if (!ppl.length) return `<div class="sem-vacio" data-act="turAbrir" data-id="${f}">Sin turnos<br><span class="small">tocá para cargar</span></div>`;
-  const sets = Object.fromEntries(ppl.map((p) => [p.id, new Set(cel[p.id])]));
-  return `<table class="tg mini" data-act="turAbrir" data-id="${f}"><tbody>${slots.map((m) => `<tr><th class="tg-h">${m % 60 === 0 ? m / 60 : ''}</th>${ppl.map((p) => {
-    if (!sets[p.id].has(m)) return '<td></td>';
-    let k = 0; for (let x = m - iv; sets[p.id].has(x); x -= iv) k++;
-    return `<td style="background:${p.color};color:${textoSobre(p.color)}">${esc(p.nombre.toUpperCase()[k] || '')}</td>`;
-  }).join('')}</tr>`).join('')}</tbody></table>`;
 }
 
 function tMes() {
@@ -171,10 +101,11 @@ function tPersonal() {
   ${lista.map((p) => `<tr${p.activo === false ? ' class="muted"' : ''}><td><span class="sw" style="background:${p.color}"></span> <b>${esc(p.nombre)}</b>${p.rol ? ` <span class="small muted">· ${esc(p.rol)}</span>` : ''}</td><td class="num">${p.metaSemanal ? fmtH(p.metaSemanal) : '–'}</td><td class="num">${metaMes(p) ? fmtH(metaMes(p)) + (p.metaMensual ? '' : ' <span class="small muted">(auto)</span>') : '–'}</td><td>${p.activo === false ? '<span class="badge gray">Ya no trabaja</span>' : '<span class="badge in">Activo</span>'}</td><td class="right"><button class="sm" data-act="perEdit" data-id="${p.id}">Editar</button></td></tr>`).join('')}
   </tbody></table></div>` : '<div class="card empty">Agregá a las personas que trabajan, cada una con su color.</div>'}
   <h2>Horario de la planilla</h2>
-  <div class="card"><div class="form" style="grid-template-columns:repeat(3,1fr)">
+  <div class="card"><div class="form" style="grid-template-columns:repeat(4,1fr)">
     <label class="f">Desde la hora<input id="tcIni" type="number" min="0" max="23" value="${c.inicio}"></label>
     <label class="f">Hasta la hora<input id="tcFin" type="number" min="1" max="24" value="${c.fin}"></label>
     <label class="f">Cada casillero vale<select id="tcIv"><option value="60" ${c.intervalo === 60 ? 'selected' : ''}>1 hora</option><option value="30" ${c.intervalo === 30 ? 'selected' : ''}>media hora</option></select></label>
+    <label class="f">Columnas por día<input id="tcCol" type="number" min="1" max="20" value="${c.columnas}"></label>
   </div><p class="small muted">Los días ya cargados mantienen su tamaño de casillero; el cambio se aplica a los días nuevos.</p><div class="modal-actions"><button class="pri" data-act="turCfgSave">Guardar horario</button></div></div>`;
 }
 
@@ -196,7 +127,7 @@ function perForm(p) {
     $('.colores', box).onclick = (e) => { const b = e.target.closest('button.col'); if (b) setC(b.dataset.c); };
     $('#perColor', box).oninput = (e) => setC(e.target.value);
     $('[name=nombre]', box).oninput = (e) => ($('#perPrev', box).textContent = e.target.value || 'Nombre');
-    if (!isNew) $('#perDel', box).onclick = () => confirmBox(`Se va a eliminar a <b>${esc(p.nombre)}</b> <b>y todas sus horas cargadas</b>. Si solo dejó de trabajar, mejor tildá "Ya no trabaja".`, () => { state.personal = state.personal.filter((x) => x.id !== p.id); state.turnos.forEach((t) => { if (t.celdas) delete t.celdas[p.id]; }); limpiarVacios(); commit(); }, 'Eliminar');
+    if (!isNew) $('#perDel', box).onclick = () => confirmBox(`Se va a eliminar a <b>${esc(p.nombre)}</b> <b>y todas sus horas cargadas</b>. Si solo dejó de trabajar, mejor tildá "Ya no trabaja".`, () => { state.personal = state.personal.filter((x) => x.id !== p.id); state.turnos.forEach((t) => { ensureSlots(t); for (const k of Object.keys(t.slots)) if (t.slots[k] === p.id) delete t.slots[k]; derivar(t); }); limpiarVacios(); commit(); }, 'Eliminar');
     $('#perOk', box).onclick = () => {
       const v = vals(box); if (!v.nombre) return toast('Poné el nombre');
       const data = { nombre: v.nombre, rol: v.rol, color, metaSemanal: numIn(v.metaSemanal), metaDiaria: numIn(v.metaDiaria), metaMensual: numIn(v.metaMensual), activo: !v.inactivo };
@@ -219,15 +150,20 @@ function turRapido() {
     $('#trOk', box).onclick = () => {
       const v = vals(box), a = Number(v.desde), b = Number(v.hasta); if (b <= a) return toast('"Hasta" tiene que ser después de "Desde"');
       const dias = semana(ui.turFecha).filter((f, i) => v['d' + i]); if (!dias.length) return toast('Elegí al menos un día');
-      dias.forEach((f) => { const d = ensureDia(f), s = d.intervalo || 60, arr = d.celdas[v.pid] || (d.celdas[v.pid] = []); for (let m = Math.floor(a / s) * s; m < b; m += s) if (!arr.includes(m)) arr.push(m); arr.sort((x, y) => x - y); });
+      dias.forEach((f) => agregarTurno(f, v.pid, a, b));
       closeModal(); commit(); toast(`Turno cargado en ${dias.length} día${dias.length > 1 ? 's' : ''} ✔`);
     };
   });
 }
+function agregarTurno(f, pid, a, b) { // pone a la persona en la primera columna libre de ese horario
+  const d = ensureDia(f), s = d.intervalo || 60, mins = []; for (let m = Math.floor(a / s) * s; m < b; m += s) mins.push(m);
+  let lane = 0; while (lane < 40 && !mins.every((m) => !d.slots[`${lane}_${m}`] || d.slots[`${lane}_${m}`] === pid)) lane++;
+  mins.forEach((m) => (d.slots[`${lane}_${m}`] = pid)); d.carriles = Math.max(d.carriles || 0, lane + 1); derivar(d);
+}
 function copiarDia(origen, destino) {
-  const o = diaDoc(origen); if (!o) return false;
+  const o = diaDoc(origen); if (!o) return false; ensureSlots(o);
   state.turnos = state.turnos.filter((t) => t.id !== destino);
-  state.turnos.push({ id: destino, fecha: destino, intervalo: o.intervalo, celdas: JSON.parse(JSON.stringify(o.celdas || {})), nota: '' });
+  state.turnos.push({ id: destino, fecha: destino, intervalo: o.intervalo, carriles: o.carriles, slots: JSON.parse(JSON.stringify(o.slots || {})), celdas: JSON.parse(JSON.stringify(o.celdas || {})), nota: '' });
   return true;
 }
 
@@ -236,7 +172,7 @@ Object.assign(ACTS, {
   turDia: (k) => { ui.turFecha = addDays(ui.turFecha, Number(k)); render(); },
   turSem: (k) => { ui.turFecha = addDays(ui.turFecha, Number(k)); render(); },
   turHoy: () => { ui.turFecha = todayStr(); render(); },
-  turAbrir: (f) => { ui.turFecha = f; ui.turTab = 'dia'; render(); window.scrollTo(0, 0); },
+  turAbrir: (f) => { ui.turFecha = f; ui.turTab = 'cal'; ui.calVista = 'dia'; render(); window.scrollTo(0, 0); },
   turPintarTog: (_i, el) => { ui.turPintar = !ui.turPintar; render(); },
   turRapido,
   turCopiar: (k) => {
@@ -253,7 +189,7 @@ Object.assign(ACTS, {
     dias.some(diaDoc) ? confirmBox('Se van a reemplazar los días de esta semana con los de la semana anterior.', go, 'Reemplazar') : go();
   },
   turPrint: () => { document.body.classList.add('imprimiendo'); setTimeout(() => { window.print(); document.body.classList.remove('imprimiendo'); }, 50); },
-  turCfgSave: () => { const ini = Math.max(0, Math.min(23, Number($('#tcIni').value) || 0)), fin = Math.max(ini + 1, Math.min(24, Number($('#tcFin').value) || 24)); state.config.turnos = { inicio: ini, fin, intervalo: Number($('#tcIv').value) || 60 }; commit(); toast('Horario guardado ✔'); },
+  turCfgSave: () => { const ini = Math.max(0, Math.min(23, Number($('#tcIni').value) || 0)), fin = Math.max(ini + 1, Math.min(24, Number($('#tcFin').value) || 24)); state.config.turnos = { inicio: ini, fin, intervalo: Number($('#tcIv').value) || 60, columnas: Math.max(1, Math.min(20, Number($('#tcCol').value) || 8)) }; commit(); toast('Horario guardado ✔'); },
   perNew: () => perForm(),
   perEdit: (id) => perForm(persona(id)),
 });
@@ -281,66 +217,115 @@ const rango = (arr, iv) => { // [[ini, fin], ...] de bloques contiguos
 };
 const hcorta = (m) => (m % 60 ? hhmm(m) : String(m / 60));
 
+function paleta() {
+  const ppl = activos();
+  if (!ppl.length) return '<p class="small"><b>Primero cargá el personal en la pestaña Personal.</b></p>';
+  if (!ui.pincel || (!ui.pincel.startsWith('t:') && ui.pincel !== 'borrar' && !persona(ui.pincel))) ui.pincel = ppl[0].id;
+  const txt = ui.pincel.startsWith('t:') ? ui.pincel.slice(2) : '';
+  return `<div class="paleta">${ppl.map((p) => `<button class="pin${ui.pincel === p.id ? ' sel' : ''}" data-act="pincel" data-id="${p.id}" style="background:${p.color};color:${textoSobre(p.color)}">${esc(p.nombre.toUpperCase())}</button>`).join('')}
+    <button class="pin pin-txt${txt ? ' sel' : ''}" data-act="pincelTexto">✏️ ${txt ? esc(txt) : 'Texto'}</button>
+    <button class="pin pin-borrar${ui.pincel === 'borrar' ? ' sel' : ''}" data-act="pincel" data-id="borrar">🧽 Borrar</button></div>`;
+}
+
 function tCal() {
-  const v = ui.calVista, per = periodo();
+  const v = ui.calVista, per = periodo(), editable = v !== 'anio';
   const vistas = [['dia', 'Día'], ['semana', 'Semana'], ['mes', 'Mes'], ['anio', 'Año']];
   const cuerpo = { dia: () => xlsGrid([ui.turFecha], true), semana: () => xlsGrid(semana(ui.turFecha), false), mes: xlsMes, anio: xlsAnio }[v]();
-  return `<div class="card no-print" style="margin-bottom:10px"><div class="spread">
+  return `<div class="card no-print cal-barra" style="margin-bottom:10px"><div class="spread">
     <div class="tabs" style="margin:0">${vistas.map(([k, l]) => `<button class="${v === k ? 'on' : ''}" data-act="calVista" data-id="${k}">${l}</button>`).join('')}</div>
     <div class="row"><button data-act="calMov" data-id="-1">◀</button><b>${per.nombre}</b><button data-act="calMov" data-id="1">▶</button><button class="sm" data-act="turHoy">Hoy</button></div>
-    <div class="row">${v === 'dia' || v === 'semana' ? `<button class="pri sm" data-act="turRapido">➕ Cargar turno</button><button class="sm" data-act="${v === 'dia' ? 'turCopiar' : 'turCopiarSem'}" ${v === 'dia' ? 'data-id="-7"' : ''}>Copiar ${v === 'dia' ? 'de la semana pasada' : 'semana anterior'}</button>` : ''}<button class="sm" data-act="turPrint">🖨 Imprimir</button>${v === 'dia' || v === 'semana' ? `<label class="small row" style="gap:6px"><input type="checkbox" data-act="turPintarTog" ${ui.turPintar ? 'checked' : ''} style="width:auto"> Pintar</label>` : ''}</div></div>
-    <p class="small muted" style="margin:8px 0 0">${v === 'dia' || v === 'semana' ? 'Tocá o arrastrá sobre la columna de cada persona para pintar sus horas; tocá una hora pintada para borrarla.' : 'Tocá un día para abrirlo y editarlo.'}${activos().length ? '' : ' <b>Primero cargá el personal en la pestaña Personal.</b>'}</p></div>
+    <div class="row">${v === 'dia' || v === 'semana' ? `<button class="sm" data-act="turRapido">➕ Turno de … a …</button><button class="sm" data-act="${v === 'dia' ? 'turCopiar' : 'turCopiarSem'}" ${v === 'dia' ? 'data-id="-7"' : ''}>Copiar ${v === 'dia' ? 'de la semana pasada' : 'semana anterior'}</button>` : ''}<button class="sm" data-act="turPrint">🖨 Imprimir</button>${editable ? `<label class="small row" style="gap:6px"><input type="checkbox" data-act="turPintarTog" ${ui.turPintar ? 'checked' : ''} style="width:auto"> Pintar</label>` : ''}</div></div>
+    ${editable ? `<div class="mt">${paleta()}</div><p class="small muted" style="margin:6px 0 0">Elegí a la persona arriba y tocá o arrastrá sobre cualquier cuadrado para ponerla ahí. Tocá un cuadrado que ya es suyo para sacarlo. Tocá la banda amarilla para escribir una nota del día.</p>` : '<p class="small muted" style="margin:8px 0 0">Tocá un día para abrirlo y editarlo.</p>'}</div>
   <div class="print-title">${esc(state.config.negocio)} · Turnos · ${per.nombre}</div>
   ${cuerpo}
   ${resumenPeriodo(per, v)}`;
 }
 
-// Día y semana: la planilla con banda amarilla, nombre del día y una columna por persona
+// Planilla de uno o varios días: banda amarilla con número y nota, nombre del día, columnas libres por día
 function xlsGrid(dias, grande) {
-  const ppl = activos(); if (!ppl.length) return '';
-  const c = turCfg(); const iv = c.intervalo;
+  const c = turCfg(), iv = c.intervalo;
   let ini = c.inicio * 60, fin = c.fin * 60;
-  dias.forEach((f) => { const d = diaDoc(f); if (d) Object.values(d.celdas || {}).flat().forEach((m) => { ini = Math.min(ini, m); fin = Math.max(fin, m + (d.intervalo || 60)); }); });
-  ini = Math.floor(ini / iv) * iv; const slots = []; for (let m = ini; m < fin; m += iv) slots.push(m);
-  const extra = (f) => { const d = diaDoc(f); return d ? Object.keys(d.celdas || {}).filter((id) => !ppl.some((p) => p.id === id) && persona(id) && d.celdas[id].length).map(persona) : []; };
-  const cols = dias.map((f) => [...ppl, ...extra(f)]);
-  const W = grande ? '' : ' compacta';
-  let h = `<div class="xls-wrap"><table class="xls${ui.turPintar ? ' pintar' : ''}${W}" data-iv="${iv}"><thead>
-    <tr>${dias.map((f, i) => `<th class="xls-num" colspan="${cols[i].length + 1}">${parseD(f).getDate()}</th>`).join('')}</tr>
-    <tr>${dias.map((f, i) => `<th class="xls-dia" colspan="${cols[i].length + 1}">${DIAS_UP[(parseD(f).getDay() + 6) % 7]}</th>`).join('')}</tr>
-    <tr>${dias.map((f, i) => `<th class="xls-hora xls-sep"></th>${cols[i].map((p) => `<th class="xls-per" style="background:${p.color};color:${textoSobre(p.color)}" title="${esc(p.nombre)}">${esc(grande ? p.nombre : p.nombre.slice(0, 3))}</th>`).join('')}`).join('')}</tr></thead><tbody>`;
-  for (const m of slots) {
-    h += '<tr>' + dias.map((f, i) => {
-      const d = diaDoc(f);
-      return `<th class="xls-hora xls-sep">${hcorta(m)}</th>` + cols[i].map((p) => {
-        if (!enCelda(d, p.id, m)) return `<td class="tg-c" data-f="${f}" data-p="${p.id}" data-m="${m}"></td>`;
-        let k = 0; for (let x = m - iv; x >= ini && enCelda(d, p.id, x); x -= iv) k++;
-        const n = p.nombre.toUpperCase(), letra = n.length * 2 <= Math.max(1, slots.length) ? n[k] || '' : n[k] || '';
-        return `<td class="tg-c on" data-f="${f}" data-p="${p.id}" data-m="${m}" style="background:${p.color};color:${textoSobre(p.color)}">${esc(letra)}</td>`;
-      }).join('');
-    }).join('') + '</tr>';
+  const docs = dias.map(diaDoc), sl = docs.map(slotsDia);
+  sl.forEach((S, i) => Object.keys(S).forEach((k) => { const m = Number(k.split('_')[1]); ini = Math.min(ini, m); fin = Math.max(fin, m + ((docs[i] && docs[i].intervalo) || iv)); }));
+  ini = Math.floor(ini / iv) * iv; const filas = []; for (let m = ini; m < fin; m += iv) filas.push(m);
+  const lanes = dias.map((f, i) => { let n = Math.max((docs[i] && docs[i].carriles) || 0, c.columnas); Object.keys(sl[i]).forEach((k) => (n = Math.max(n, Number(k.split('_')[0]) + 1))); return n; });
+  const val = (i, l, m) => { const d = docs[i]; if (!d) return ''; const div = d.intervalo || 60; return sl[i][`${l}_${m - (m % div)}`] || ''; };
+  let h = `<div class="xls-wrap"><table class="xls${ui.turPintar ? ' pintar' : ''}${grande ? '' : ' compacta'}"><thead>
+    <tr>${dias.map((f, i) => `<th class="xls-num" colspan="${lanes[i] + 1}" data-act="turNota" data-id="${f}"><span>${parseD(f).getDate()}</span>${docs[i] && docs[i].nota ? `<em class="xls-nota">${esc(docs[i].nota)}</em>` : ''}</th>`).join('')}</tr>
+    <tr>${dias.map((f, i) => `<th class="xls-dia" colspan="${lanes[i] + 1}">${DIAS_UP[(parseD(f).getDay() + 6) % 7]}</th>`).join('')}</tr></thead><tbody>`;
+  for (const m of filas) {
+    h += '<tr>' + dias.map((f, i) => `<th class="xls-hora xls-sep">${hcorta(m)}</th>` + Array.from({ length: lanes[i] }, (_, l) => {
+      const v = val(i, l, m), attrs = `class="xc" data-f="${f}" data-l="${l}" data-m="${m}"`;
+      if (!v) return `<td ${attrs}></td>`;
+      if (v.startsWith('t:')) return `<td ${attrs} data-v="${esc(v)}"><span class="xls-txt">${esc(v.slice(2))}</span></td>`;
+      const p = persona(v); if (!p) return `<td ${attrs}></td>`;
+      let k = 0; for (let x = m - iv; x >= ini && val(i, l, x) === v; x -= iv) k++;
+      return `<td ${attrs} data-v="${v}" style="background:${p.color};color:${textoSobre(p.color)}">${esc(p.nombre.toUpperCase()[k] || '')}</td>`;
+    }).join('')).join('') + '</tr>';
   }
-  h += `</tbody><tfoot><tr>${dias.map((f, i) => `<th class="xls-hora xls-sep">hs</th>${cols[i].map((p) => { const hh = horasDia(f, p.id); return `<th class="xls-tot">${hh ? fmtNum(hh) : ''}</th>`; }).join('')}`).join('')}</tr></tfoot></table></div>`;
+  h += `</tbody><tfoot><tr>${dias.map((f, i) => {
+    const d = docs[i], ppl = d ? Object.keys(d.celdas || {}).map(persona).filter(Boolean) : [];
+    return `<th class="xls-hora xls-sep">hs</th><th class="xls-tot" colspan="${lanes[i]}">${ppl.length ? ppl.map((p) => `<span style="color:${p.color}">■</span>${esc(grande ? p.nombre : p.nombre.slice(0, 3))} ${fmtNum(horasDia(f, p.id))}`).join(' · ') : ''}${grande ? ` <button class="sm link no-print" data-act="turMasCol" data-id="${f}">+ columna</button>` : ''}</th>`;
+  }).join('')}</tr></tfoot></table></div>`;
   return h;
 }
 
-// Mes: calendario mensual con los turnos de cada día en su color
+// Mes completo: las semanas una debajo de otra, con la misma planilla editable
 function xlsMes() {
   const d = parseD(ui.turFecha), Y = d.getFullYear(), M = d.getMonth();
-  const first = new Date(Y, M, 1), start = new Date(first); start.setDate(1 - ((first.getDay() + 6) % 7));
-  const celdas = []; for (let i = 0; i < 42; i++) { const x = new Date(start); x.setDate(start.getDate() + i); celdas.push(x); }
-  const semanas = celdas[35].getMonth() !== M ? 5 : 6;
-  return `<div class="xls-wrap"><table class="xls xls-mes"><thead><tr><th class="xls-num" colspan="7">${MESES[M].toUpperCase()} ${Y}</th></tr><tr>${DIAS_UP.map((n) => `<th class="xls-dia">${n}</th>`).join('')}</tr></thead><tbody>
-  ${Array.from({ length: semanas }, (_, w) => `<tr>${celdas.slice(w * 7, w * 7 + 7).map((x) => {
-    const f = ymd(x), doc = diaDoc(f), otro = x.getMonth() !== M;
-    const items = doc ? state.personal.filter((p) => ((doc.celdas || {})[p.id] || []).length).map((p) => {
-      const bl = rango(doc.celdas[p.id], doc.intervalo || 60).map(([a, b]) => `${hcorta(a)}-${hcorta(b)}`).join(' / ');
-      return `<div class="xls-chip" style="background:${p.color};color:${textoSobre(p.color)}" title="${esc(p.nombre)} ${bl}"><b>${esc(p.nombre.toUpperCase())}</b> <span>${bl}</span></div>`;
-    }).join('') : '';
-    return `<td class="xls-mdia${otro ? ' otro' : ''}${f === todayStr() ? ' hoy' : ''}" data-act="calIrDia" data-id="${f}"><div class="xls-mnum">${x.getDate()}</div>${items}</td>`;
-  }).join('')}</tr>`).join('')}</tbody></table></div>`;
+  const ult = ymd(new Date(Y, M + 1, 0)); const out = [];
+  for (let l = lunes(ymd(new Date(Y, M, 1))); l <= ult; l = addDays(l, 7)) out.push(`<div class="xls-semtit">Semana del ${fmtDate(l)} al ${fmtDate(addDays(l, 6))}</div>${xlsGrid(semana(l), false)}`);
+  return `<div class="xls-mesbloque">${out.join('')}</div>`;
 }
 
+// Pintar casilleros: tocar o arrastrar con la persona elegida
+let pinta = null;
+function aplicar(td) {
+  const f = td.dataset.f, d = ensureDia(f), div = d.intervalo || 60, m0 = Number(td.dataset.m), key = `${td.dataset.l}_${m0 - (m0 % div)}`;
+  if (pinta.modo === 'borrar') delete d.slots[key]; else d.slots[key] = pinta.valor;
+  if (Number(td.dataset.l) + 1 > (d.carriles || 0)) d.carriles = Number(td.dataset.l) + 1;
+  pinta.dias.add(d);
+  if (pinta.modo === 'borrar') { td.style.background = ''; td.style.color = ''; td.textContent = ''; delete td.dataset.v; }
+  else if (pinta.valor.startsWith('t:')) { td.style.background = ''; td.style.color = ''; td.innerHTML = `<span class="xls-txt">${esc(pinta.valor.slice(2))}</span>`; td.dataset.v = pinta.valor; }
+  else { const p = persona(pinta.valor); td.style.background = p.color; td.style.color = textoSobre(p.color); td.dataset.v = pinta.valor; }
+}
+document.addEventListener('pointerdown', (e) => {
+  const td = e.target.closest('table.pintar td.xc'); if (!td || e.button > 0) return;
+  e.preventDefault();
+  const pin = ui.pincel || (activos()[0] || {}).id; if (!pin) return toast('Primero cargá el personal');
+  const modo = pin === 'borrar' || td.dataset.v === pin ? 'borrar' : 'poner';
+  pinta = { modo, valor: pin, dias: new Set(), ultimo: null };
+  aplicar(td); pinta.ultimo = td;
+});
+document.addEventListener('pointermove', (e) => {
+  if (!pinta) return;
+  const el = document.elementFromPoint(e.clientX, e.clientY), td = el && el.closest && el.closest('table.pintar td.xc');
+  if (!td || td === pinta.ultimo) return;
+  const u = pinta.ultimo;
+  if (u && u.dataset.f === td.dataset.f && u.dataset.l === td.dataset.l) { // rellena lo que se saltó el dedo o el mouse en la misma columna
+    const a = Math.min(+u.dataset.m, +td.dataset.m), b = Math.max(+u.dataset.m, +td.dataset.m);
+    $$('table.pintar td.xc[data-f="' + td.dataset.f + '"][data-l="' + td.dataset.l + '"]').filter((x) => +x.dataset.m > a && +x.dataset.m < b).forEach(aplicar);
+  }
+  aplicar(td); pinta.ultimo = td;
+});
+['pointerup', 'pointercancel'].forEach((ev) => document.addEventListener(ev, () => { if (!pinta) return; pinta.dias.forEach(derivar); pinta = null; limpiarVacios(); commit(); }));
+
+function notaForm(f) {
+  const d = diaDoc(f);
+  openModal(`<h3>Nota del ${DIAS[(parseD(f).getDay() + 6) % 7].toLowerCase()} ${fmtDate(f)}</h3><p class="small muted">Aparece en la banda amarilla del día, como en la planilla de papel.</p>
+  <label class="f">Nota<textarea id="nTxt" placeholder="Ej: KEVIN: atención este día, quizás te pregunto por horas.">${esc((d && d.nota) || '')}</textarea></label>
+  <div class="modal-actions"><button data-act="close">Cancelar</button><button class="pri" id="nOk">Guardar</button></div>`, (box) => {
+    $('#nOk', box).onclick = () => { const t = $('#nTxt', box).value.trim(); const dd = t ? ensureDia(f) : diaDoc(f); if (dd) { dd.nota = t; derivar(dd); } limpiarVacios(); closeModal(); commit(); };
+  });
+}
+function textoForm() {
+  openModal(`<h3>Escribir un texto en los cuadrados</h3><p class="small muted">Para cosas como "catering", "M" o "libre". No suma horas a nadie.</p>
+  <label class="f">Texto<input id="tTxt" maxlength="14" value="${esc(ui.pincel.startsWith('t:') ? ui.pincel.slice(2) : '')}" placeholder="Ej: catering"></label>
+  <div class="modal-actions"><button data-act="close">Cancelar</button><button class="pri" id="tOk">Usar este texto</button></div>`, (box) => {
+    const ok = () => { const t = $('#tTxt', box).value.trim(); if (!t) return toast('Escribí el texto'); ui.pincel = 't:' + t; closeModal(); render(); };
+    $('#tOk', box).onclick = ok; $('#tTxt', box).onkeydown = (e) => { if (e.key === 'Enter') ok(); };
+  });
+}
 // Año: 12 meses chicos; cada día muestra los colores de quienes trabajaron
 function xlsAnio() {
   const Y = parseD(ui.turFecha).getFullYear();
@@ -389,4 +374,8 @@ Object.assign(ACTS, {
   calMov: (k) => { moverPeriodo(Number(k)); render(); },
   calIrDia: (f) => { ui.turFecha = f; ui.calVista = 'dia'; render(); window.scrollTo(0, 0); },
   calIrMes: (f) => { ui.turFecha = f; ui.calVista = 'mes'; render(); },
+  pincel: (id) => { ui.pincel = id; render(); },
+  pincelTexto: textoForm,
+  turNota: (f) => notaForm(f),
+  turMasCol: (f) => { const d = ensureDia(f); d.carriles = Math.max(d.carriles || 0, turCfg().columnas) + 1; commit(); },
 });

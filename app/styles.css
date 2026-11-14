@@ -61,7 +61,7 @@ td.num,th.num{text-align:right;white-space:nowrap}
 .photo-pick{display:flex;gap:12px;align-items:center}
 .photo-pick .prev{width:110px;height:84px;border-radius:9px;background:#eef1f0 center/cover no-repeat;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:#a9b5b1;font-size:30px;flex-shrink:0}
 .extra{display:grid;grid-template-columns:1fr 1fr auto;gap:6px;margin-bottom:6px}
-#toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#173f36;color:#fff;padding:10px 18px;border-radius:10px;z-index:60;box-shadow:0 6px 20px #0003}
+#toast{pointer-events:none;position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#173f36;color:#fff;padding:10px 18px;border-radius:10px;z-index:60;box-shadow:0 6px 20px #0003}
 #toast.hidden{display:none}
 .tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
 .tabs button.on{background:var(--pri);color:#fff;border-color:var(--pri)}
@@ -155,9 +155,10 @@ table.pintar td.tg-c{touch-action:none}
 .xls .xls-per{font-size:10px;height:20px;top:58px;padding:0 2px;overflow:hidden;white-space:nowrap;max-width:60px;text-overflow:ellipsis}
 .xls .xls-hora{background:#fff;color:#1f6fb2;font-size:10px;width:30px;min-width:30px;font-weight:700}
 .xls .xls-sep{border-left:3px solid #000}
-.xls td.tg-c{height:22px;min-width:44px;font-size:13px;font-weight:800;cursor:pointer}
-.xls.compacta td.tg-c{min-width:24px;font-size:11px}
-.xls td.tg-c:not(.on):hover{background:#fff7b3}
+.xls td.xc{height:22px;min-width:44px;font-size:13px;font-weight:800;cursor:pointer}
+.xls.compacta td.xc{min-width:26px;font-size:11px}
+.xls.pintar td.xc:not([data-v]):hover{background:#fff7b3}
+table.pintar td.xc{touch-action:none}
 .xls tfoot th{background:#f2f2f2;font-size:11px;height:20px;position:sticky;bottom:0}
 .xls-mes .xls-num{position:sticky}
 .xls-mes td.xls-mdia{vertical-align:top;height:112px;width:14.28%;cursor:pointer;padding:0 0 3px;text-align:left}
@@ -176,4 +177,19 @@ table.pintar td.tg-c{touch-action:none}
 .xls-barras i{flex:1}
 .xls-nom{display:inline-block;padding:2px 8px;font-family:Arial,Helvetica,sans-serif;font-weight:800;font-size:12px}
 @media print{ .xls-wrap{max-height:none;overflow:visible;border:0} .xls th,.xls td,.xls-chip,.xls-barras i,.xls-nom,.xls-mnum{-webkit-print-color-adjust:exact;print-color-adjust:exact} .xls thead th,.xls tfoot th{position:static} }
-@media (max-width:760px){ .xls td.tg-c{min-width:36px} .xls-mes td.xls-mdia{height:84px} .xls-chip span{display:none} }
+@media (max-width:760px){ .xls td.xc{min-width:34px} .xls-mes td.xls-mdia{height:84px} .xls-chip span{display:none} }
+
+.xls .xls-num{cursor:pointer;position:sticky}
+.xls .xls-num span{display:inline-block}
+.xls-nota{display:block;font-style:normal;font-size:10px;font-weight:800;line-height:1.2;color:#000;max-width:340px;margin:0 auto 3px;white-space:normal}
+.xls-txt{color:#1f6fb2;font-weight:800;font-size:11px;white-space:nowrap}
+.xls .xls-tot{text-align:left;padding:2px 6px;font-weight:600;font-size:11px;white-space:normal}
+.xls-semtit{font-weight:700;margin:14px 0 4px}
+.xls-mesbloque .xls-wrap{max-height:none}
+.paleta{display:flex;flex-wrap:wrap;gap:6px}
+.pin{font-family:Arial,Helvetica,sans-serif;font-weight:800;font-size:13px;border:2px solid transparent;border-radius:6px;padding:7px 12px}
+.pin.sel{border-color:#000;box-shadow:0 0 0 2px #ffff00,0 0 0 4px #000}
+.pin-txt{background:#fff;color:#1f6fb2;border-color:var(--line)}
+.pin-borrar{background:#fff;color:var(--out);border-color:var(--line)}
+.cal-barra{position:sticky;top:0;z-index:5}
+@media (max-width:760px){ .cal-barra{position:static} }
