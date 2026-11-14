@@ -118,7 +118,7 @@ body.login #nav{display:none}
 .tg .tg-h{position:sticky;left:0;background:#fafbfb;z-index:1;padding:0 8px;color:var(--muted);font-weight:600;width:52px;min-width:52px;font-size:12px}
 .tg thead .tg-h{z-index:3}
 .tg td.tg-c{height:30px;font-weight:800;font-size:13px;cursor:pointer}
-.tg.pintar td.tg-c{touch-action:none}
+table.pintar td.tg-c{touch-action:none}
 .tg td.tg-c:not(.on):hover{background:#eef4f1}
 .semana{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px}
 .sem-dia{flex:1 0 128px;min-width:128px}
@@ -145,3 +145,35 @@ body.login #nav{display:none}
   .sem-tit{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 @media (max-width:760px){ .tg thead th{min-width:62px} #nav a{min-width:46px} }
+/* ---- Calendario estilo planilla Excel ---- */
+.xls-wrap{overflow:auto;background:#fff;border:1px solid #000;max-height:78vh}
+.xls{border-collapse:collapse;font-family:Arial,Helvetica,sans-serif;background:#fff;width:100%}
+.xls th,.xls td{border:1px solid #000;padding:0;text-align:center;font-weight:700;text-transform:none;letter-spacing:0;background-clip:padding-box}
+.xls thead th{position:sticky;z-index:2}
+.xls .xls-num{background:#ffff00;color:#000;font-size:26px;font-weight:900;height:38px;top:0;border-bottom:0}
+.xls .xls-dia{background:#fff;color:#000;font-size:12px;font-weight:700;height:20px;top:38px}
+.xls .xls-per{font-size:10px;height:20px;top:58px;padding:0 2px;overflow:hidden;white-space:nowrap;max-width:60px;text-overflow:ellipsis}
+.xls .xls-hora{background:#fff;color:#1f6fb2;font-size:10px;width:30px;min-width:30px;font-weight:700}
+.xls .xls-sep{border-left:3px solid #000}
+.xls td.tg-c{height:22px;min-width:44px;font-size:13px;font-weight:800;cursor:pointer}
+.xls.compacta td.tg-c{min-width:24px;font-size:11px}
+.xls td.tg-c:not(.on):hover{background:#fff7b3}
+.xls tfoot th{background:#f2f2f2;font-size:11px;height:20px;position:sticky;bottom:0}
+.xls-mes .xls-num{position:sticky}
+.xls-mes td.xls-mdia{vertical-align:top;height:112px;width:14.28%;cursor:pointer;padding:0 0 3px;text-align:left}
+.xls-mes td.otro{background:#f3f3f3;opacity:.55}
+.xls-mes td.hoy .xls-mnum{background:#1f6f5c;color:#fff}
+.xls-mnum{background:#ffff00;font-weight:900;font-size:15px;text-align:center;border-bottom:1px solid #000;margin-bottom:2px}
+.xls-chip{font-size:10.5px;line-height:1.25;margin:1px 2px;padding:1px 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.xls-chip span{font-weight:400}
+.xls-anio{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.xls-ames .xls-num{font-size:15px;height:26px;cursor:pointer;position:static}
+.xls-ames .xls-dia{position:static;font-size:10px;height:16px}
+.xls-adia{height:30px;cursor:pointer;vertical-align:top;font-size:10px;width:14.28%}
+.xls-adia.hoy{outline:2px solid #1f6f5c;outline-offset:-2px}
+.xls-adia span{display:block;line-height:14px}
+.xls-barras{display:flex;height:13px}
+.xls-barras i{flex:1}
+.xls-nom{display:inline-block;padding:2px 8px;font-family:Arial,Helvetica,sans-serif;font-weight:800;font-size:12px}
+@media print{ .xls-wrap{max-height:none;overflow:visible;border:0} .xls th,.xls td,.xls-chip,.xls-barras i,.xls-nom,.xls-mnum{-webkit-print-color-adjust:exact;print-color-adjust:exact} .xls thead th,.xls tfoot th{position:static} }
+@media (max-width:760px){ .xls td.tg-c{min-width:36px} .xls-mes td.xls-mdia{height:84px} .xls-chip span{display:none} }
