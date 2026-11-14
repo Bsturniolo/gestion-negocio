@@ -1,5 +1,7 @@
 # Gestión del Negocio
 
+Versión para el celular: https://bsturniolo.github.io/gestion-negocio/
+
 App para manejar stock, proveedores, cobros, gastos, inversión, balance mensual/anual y un calendario de deudas y préstamos. Funciona en Windows (instalador) y en el celular (app web instalable), con los datos sincronizados por Firebase.
 
 ## Estructura
