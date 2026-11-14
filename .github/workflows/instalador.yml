@@ -1,0 +1,38 @@
+name: Instalador de Windows
+# Cada vez que cambia la versión (package.json) arma el instalador en Windows y lo deja en Releases.
+# Link fijo a la última versión:
+# https://github.com/Bsturniolo/gestion-negocio/releases/latest/download/Gestion-del-Negocio-Instalador.exe
+on:
+  push:
+    branches: [main]
+    paths: [package.json, .github/workflows/instalador.yml]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: instalador
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx electron-builder --win --publish never
+      - name: Publicar en Releases
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=$(node -p "require('./package.json').version")
+          cp "dist/Gestion-del-Negocio-Instalador-$V.exe" Gestion-del-Negocio-Instalador.exe
+          NOTAS="Instalador para Windows. Descargá Gestion-del-Negocio-Instalador.exe y abrilo. Si aparece \"Windows protegió su PC\": Más información → Ejecutar de todas formas."
+          if gh release view "v$V" >/dev/null 2>&1; then
+            gh release upload "v$V" Gestion-del-Negocio-Instalador.exe --clobber
+          else
+            gh release create "v$V" Gestion-del-Negocio-Instalador.exe --title "Gestión del Negocio $V" --notes "$NOTAS" --target "$GITHUB_SHA" --latest
+          fi
