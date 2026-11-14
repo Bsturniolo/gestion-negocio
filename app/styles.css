@@ -307,3 +307,20 @@ tr.clic{cursor:pointer}tr.clic:hover td{background:#f6faf8}
   .modal-actions>*{flex:1 1 auto;justify-content:center}
   .kpi .val{font-size:22px}
 }
+/* más aire entre filas y botones */
+.locales .link{border:1.5px dashed var(--pri);border-radius:20px;padding:6px 12px;background:#fff}
+@media (max-width:760px){
+  .locales{background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin:4px -12px 18px;padding:10px 12px;gap:10px}
+  .locales .link{min-height:38px}
+  #main>.spread{margin-bottom:14px}
+  #main>.spread>.row{gap:10px}
+  .acciones{gap:10px;margin-bottom:22px!important}
+  .acciones button{min-height:52px;font-size:15px}
+  .grid.kpis{grid-template-columns:1fr 1fr;gap:12px;margin-top:6px}
+  .kpi{padding:16px 14px}
+  .kpi .lbl{font-size:14px}
+  .kpi .val{font-size:26px;margin-top:4px}
+  .kpi .hint{font-size:12.5px;margin-top:4px}
+  h2{margin-top:26px}
+  .tabs{gap:8px;margin-bottom:16px}
+}
