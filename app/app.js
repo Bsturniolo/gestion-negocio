@@ -233,7 +233,15 @@ function render() {
   syncBadge();
   if (needLogin()) { $('#main').innerHTML = vLogin(); const pw = $('#lgPass'); if (pw) pw.onkeydown = (e) => { if (e.key === 'Enter') ACTS.lgGo(); }; return; }
   const fn = { inicio: vInicio, productos: vProductos, proveedores: vProveedores, finanzas: vFinanzas, balance: vBalance, calendario: vCalendario, turnos: vTurnos, ajustes: vAjustes }[view];
+  // al redibujar, la pantalla y las planillas con desplazamiento quedan donde estaban
+  const scrolls = $$('#main .xls-wrap, #main .tablewrap, #main .tg-wrap').map((el) => [el.scrollLeft, el.scrollTop]);
+  const winY = window.scrollY, mismaVista = render._ultima === view;
   $('#main').innerHTML = fn();
+  if (mismaVista) {
+    $$('#main .xls-wrap, #main .tablewrap, #main .tg-wrap').forEach((el, i) => { if (scrolls[i]) { el.scrollLeft = scrolls[i][0]; el.scrollTop = scrolls[i][1]; } });
+    window.scrollTo(0, winY);
+  }
+  render._ultima = view;
   bindView();
 }
 
