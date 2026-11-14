@@ -228,6 +228,7 @@ function go(v) { view = v; $$('#nav a').forEach((a) => a.classList.toggle('activ
 
 function render() {
   $('#brandName').textContent = state.config.negocio || 'Mi Negocio';
+  const ver = $('#ver'); if (ver) ver.textContent = 'versión ' + (window.APP_VERSION || '');
   document.title = (state.config.negocio || 'Mi Negocio') + ' — Gestión';
   document.body.classList.toggle('login', !!needLogin());
   syncBadge();
@@ -235,11 +236,11 @@ function render() {
   const fn = { inicio: vInicio, productos: vProductos, proveedores: vProveedores, finanzas: vFinanzas, balance: vBalance, calendario: vCalendario, turnos: vTurnos, ajustes: vAjustes }[view];
   // al redibujar, la pantalla y las planillas con desplazamiento quedan donde estaban
   const scrolls = $$('#main .xls-wrap, #main .tablewrap, #main .tg-wrap').map((el) => [el.scrollLeft, el.scrollTop]);
-  const winY = window.scrollY, mismaVista = render._ultima === view;
+  const winX = window.scrollX, winY = window.scrollY, mismaVista = render._ultima === view;
   $('#main').innerHTML = fn();
   if (mismaVista) {
     $$('#main .xls-wrap, #main .tablewrap, #main .tg-wrap').forEach((el, i) => { if (scrolls[i]) { el.scrollLeft = scrolls[i][0]; el.scrollTop = scrolls[i][1]; } });
-    window.scrollTo(0, winY);
+    window.scrollTo(winX, winY);
   }
   render._ultima = view;
   bindView();
@@ -476,7 +477,7 @@ function vAjustes() {
   </div>
   <h2>Zona peligrosa</h2>
   <div class="card"><p style="margin-top:0" class="small muted">Borra todos los datos${cloud.uid ? ' <b>de la nube y de todos los dispositivos</b>' : ' de este dispositivo'}. Exportá una copia antes.</p><button class="danger" data-act="wipe">🗑 Borrar todo</button></div>
-  <p class="small muted mt">Gestión del Negocio · v1.0</p>`;
+  <p class="small muted mt">Gestión del Negocio · versión ${esc(window.APP_VERSION || '')}</p>`;
 }
 
 // ---------- Modales ----------
@@ -832,7 +833,13 @@ window.addEventListener('DOMContentLoaded', async function init() {
   startCloud();
   render();
   if (!cloud.cfg) setTimeout(notificar, 800);
-  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    // cuando se publica una versión nueva, la app se actualiza sola (sin borrar nada a mano)
+    const habia = !!navigator.serviceWorker.controller;
+    let recargando = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (habia && !recargando) { recargando = true; location.reload(); } });
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((reg) => { reg.update(); setInterval(() => reg.update(), 30 * 60000); }).catch(() => {});
+  }
   // si la app queda abierta, revisar avisos al cambiar de día
   let dia = todayStr(); setInterval(() => { if (todayStr() !== dia) { dia = todayStr(); render(); notificar(); } }, 60000);
 });

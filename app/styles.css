@@ -200,3 +200,6 @@ table.pintar td.xc{touch-action:none}
 .xls-mestit{background:#ffff00;border:1px solid #000;border-bottom:0;text-align:center;font:900 24px Arial,Helvetica,sans-serif;padding:4px}
 .xls thead th,.xls .xls-dia{position:static}
 .xls tr.xls-pie th{background:#f2f2f2}
+
+.ver{font-size:11px;color:#9fc2b6;padding:0 12px;margin-top:auto}
+@media (max-width:760px){ .ver{display:none} }

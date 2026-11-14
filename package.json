@@ -1,6 +1,6 @@
 {
   "name": "gestion-negocio",
-  "version": "1.3.3",
+  "version": "1.3.4",
   "description": "Stock, proveedores, finanzas y calendario",
   "main": "main.js",
   "scripts": {
