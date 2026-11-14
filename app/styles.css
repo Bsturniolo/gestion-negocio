@@ -179,7 +179,7 @@ table.pintar td.xc{touch-action:none}
 @media print{ .xls-wrap{max-height:none;overflow:visible;border:0} .xls th,.xls td,.xls-chip,.xls-barras i,.xls-nom,.xls-mnum{-webkit-print-color-adjust:exact;print-color-adjust:exact} .xls thead th,.xls tfoot th{position:static} }
 @media (max-width:760px){ .xls td.xc{min-width:34px} .xls-mes td.xls-mdia{height:84px} .xls-chip span{display:none} }
 
-.xls .xls-num{cursor:pointer;position:sticky}
+.xls .xls-num{cursor:pointer;position:static}
 .xls .xls-num span{display:inline-block}
 .xls-nota{display:block;font-style:normal;font-size:10px;font-weight:800;line-height:1.2;color:#000;max-width:340px;margin:0 auto 3px;white-space:normal}
 .xls-txt{color:#1f6fb2;font-weight:800;font-size:11px;white-space:nowrap}
@@ -193,3 +193,10 @@ table.pintar td.xc{touch-action:none}
 .pin-borrar{background:#fff;color:var(--out);border-color:var(--line)}
 .cal-barra{position:sticky;top:0;z-index:5}
 @media (max-width:760px){ .cal-barra{position:static} }
+
+.xls-sem-sig tr:first-child th{border-top:6px solid #fff;box-shadow:0 -1px 0 #000}
+.xls .xls-num-vacio,.xls .xls-vacio{background:#fff;cursor:default}
+.xls td.xls-fuera{background:#f2f2f2;border-top:0;border-bottom:0}
+.xls-mestit{background:#ffff00;border:1px solid #000;border-bottom:0;text-align:center;font:900 24px Arial,Helvetica,sans-serif;padding:4px}
+.xls thead th,.xls .xls-dia{position:static}
+.xls tr.xls-pie th{background:#f2f2f2}

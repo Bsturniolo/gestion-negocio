@@ -256,41 +256,57 @@ function tCal() {
   ${resumenPeriodo(per, v)}`;
 }
 
-// Planilla de uno o varios días: banda amarilla con número y nota, nombre del día, columnas libres por día
+// Planilla: una o varias filas de días (cada fila = una semana). Banda amarilla con número y nota,
+// nombre del día y columnas libres por día. null = casillero vacío (días que no son del mes).
 function xlsGrid(dias, grande) {
-  const c = turCfg(), docs = dias.map(diaDoc), sl = docs.map(slotsDia);
-  const iv = Math.min(c.intervalo, ...docs.filter(Boolean).map((d) => d.intervalo || 60));
+  const filasDias = Array.isArray(dias[0]) ? dias : [dias];
+  const c = turCfg(), todos = filasDias.flat().filter(Boolean), docs = Object.fromEntries(todos.map((f) => [f, diaDoc(f)])), sl = Object.fromEntries(todos.map((f) => [f, slotsDia(docs[f])]));
+  const iv = Math.min(c.intervalo, ...todos.map((f) => docs[f]).filter(Boolean).map((d) => d.intervalo || 60));
   let ini = c.inicio * 60, fin = c.fin * 60;
-  sl.forEach((S, i) => Object.keys(S).forEach((k) => { const m = Number(k.split('_')[1]); ini = Math.min(ini, m); fin = Math.max(fin, m + ((docs[i] && docs[i].intervalo) || iv)); }));
-  ini = Math.floor(ini / iv) * iv; const filas = []; for (let m = ini; m < fin; m += iv) filas.push(m);
-  const lanes = dias.map((f, i) => { let n = Math.max((docs[i] && docs[i].carriles) || 0, c.columnas); Object.keys(sl[i]).forEach((k) => (n = Math.max(n, Number(k.split('_')[0]) + 1))); return n; });
-  const val = (i, l, m) => { const d = docs[i]; if (!d) return ''; const div = d.intervalo || 60; return sl[i][`${l}_${m - (m % div)}`] || ''; };
-  let h = `<div class="xls-wrap"><table class="xls${ui.turPintar ? ' pintar' : ''}${grande ? '' : ' compacta'}"><thead>
-    <tr>${dias.map((f, i) => `<th class="xls-num" colspan="${lanes[i] + 1}" data-act="turNota" data-id="${f}"><span>${parseD(f).getDate()}</span>${docs[i] && docs[i].nota ? `<em class="xls-nota">${esc(docs[i].nota)}</em>` : ''}</th>`).join('')}</tr>
-    <tr>${dias.map((f, i) => `<th class="xls-dia" colspan="${lanes[i] + 1}">${DIAS_UP[(parseD(f).getDay() + 6) % 7]}</th>`).join('')}</tr></thead><tbody>`;
-  for (const m of filas) {
-    h += '<tr>' + dias.map((f, i) => `<th class="xls-hora xls-sep">${hcorta(m)}</th>` + Array.from({ length: lanes[i] }, (_, l) => {
-      const v = val(i, l, m), attrs = `class="xc" data-f="${f}" data-l="${l}" data-m="${m}"`;
-      if (!v) return `<td ${attrs}></td>`;
-      if (v.startsWith('t:')) return `<td ${attrs} data-v="${esc(v)}"><span class="xls-txt">${esc(v.slice(2))}</span></td>`;
-      const p = persona(v); if (!p) return `<td ${attrs}></td>`;
-      let k = 0; for (let x = m - iv; x >= ini && val(i, l, x) === v; x -= iv) k++;
-      return `<td ${attrs} data-v="${v}" style="background:${p.color};color:${textoSobre(p.color)}">${esc(p.nombre.toUpperCase()[k] || '')}</td>`;
-    }).join('')).join('') + '</tr>';
-  }
-  h += `</tbody><tfoot><tr>${dias.map((f, i) => {
-    const d = docs[i], ppl = d ? Object.keys(d.celdas || {}).map(persona).filter(Boolean) : [];
-    return `<th class="xls-hora xls-sep">hs</th><th class="xls-tot" colspan="${lanes[i]}">${ppl.length ? ppl.map((p) => `<span style="color:${p.color}">■</span>${esc(grande ? p.nombre : p.nombre.slice(0, 3))} ${fmtNum(horasDia(f, p.id))}`).join(' · ') : ''}${grande ? ` <button class="sm link no-print" data-act="turMasCol" data-id="${f}">+ columna</button>` : ''}</th>`;
-  }).join('')}</tr></tfoot></table></div>`;
-  return h;
+  todos.forEach((f) => Object.keys(sl[f]).forEach((k) => { const m = Number(k.split('_')[1]); ini = Math.min(ini, m); fin = Math.max(fin, m + ((docs[f] && docs[f].intervalo) || iv)); }));
+  ini = Math.floor(ini / iv) * iv; const horas = []; for (let m = ini; m < fin; m += iv) horas.push(m);
+  const lanesDe = (f) => { let n = Math.max((docs[f] && docs[f].carriles) || 0, c.columnas); Object.keys(sl[f]).forEach((k) => (n = Math.max(n, Number(k.split('_')[0]) + 1))); return n; };
+  const nCol = filasDias[0].length; // columnas iguales en todas las filas para que quede alineado como un calendario
+  const lanes = Array.from({ length: nCol }, (_, i) => Math.max(c.columnas, ...filasDias.map((r) => (r[i] ? lanesDe(r[i]) : 0))));
+  const val = (f, l, m) => { const d = docs[f]; if (!d) return ''; const div = d.intervalo || 60; return sl[f][`${l}_${m - (m % div)}`] || ''; };
+  let h = `<div class="xls-wrap"><table class="xls${ui.turPintar ? ' pintar' : ''}${grande ? '' : ' compacta'}">`;
+  filasDias.forEach((fila, r) => {
+    const vacio = (i) => `<th class="xls-vacio" colspan="${lanes[i] + 1}"></th>`;
+    h += `<tbody class="xls-sem${r ? ' xls-sem-sig' : ''}">
+    <tr>${fila.map((f, i) => (f ? `<th class="xls-num" colspan="${lanes[i] + 1}" data-act="turNota" data-id="${f}"><span>${parseD(f).getDate()}</span>${docs[f] && docs[f].nota ? `<em class="xls-nota">${esc(docs[f].nota)}</em>` : ''}</th>` : `<th class="xls-num xls-num-vacio" colspan="${lanes[i] + 1}"></th>`)).join('')}</tr>
+    <tr>${fila.map((f, i) => (f ? `<th class="xls-dia" colspan="${lanes[i] + 1}">${DIAS_UP[(parseD(f).getDay() + 6) % 7]}</th>` : vacio(i))).join('')}</tr>`;
+    for (const m of horas) {
+      h += '<tr>' + fila.map((f, i) => {
+        if (!f) return `<td class="xls-fuera" colspan="${lanes[i] + 1}"></td>`;
+        return `<th class="xls-hora xls-sep">${hcorta(m)}</th>` + Array.from({ length: lanes[i] }, (_, l) => {
+          const v = val(f, l, m), attrs = `class="xc" data-f="${f}" data-l="${l}" data-m="${m}"`;
+          if (!v) return `<td ${attrs}></td>`;
+          if (v.startsWith('t:')) return `<td ${attrs} data-v="${esc(v)}"><span class="xls-txt">${esc(v.slice(2))}</span></td>`;
+          const p = persona(v); if (!p) return `<td ${attrs}></td>`;
+          let k = 0; for (let x = m - iv; x >= ini && val(f, l, x) === v; x -= iv) k++;
+          return `<td ${attrs} data-v="${v}" style="background:${p.color};color:${textoSobre(p.color)}">${esc(p.nombre.toUpperCase()[k] || '')}</td>`;
+        }).join('');
+      }).join('') + '</tr>';
+    }
+    h += `<tr class="xls-pie">${fila.map((f, i) => {
+      if (!f) return `<td class="xls-fuera" colspan="${lanes[i] + 1}"></td>`;
+      const d = docs[f], ppl = d ? Object.keys(d.celdas || {}).map(persona).filter(Boolean) : [];
+      return `<th class="xls-hora xls-sep">hs</th><th class="xls-tot" colspan="${lanes[i]}">${ppl.length ? ppl.map((p) => `<span style="color:${p.color}">■</span>${esc(grande ? p.nombre : p.nombre.slice(0, 3))} ${fmtNum(horasDia(f, p.id))}`).join(' · ') : ''}${grande ? ` <button class="sm link no-print" data-act="turMasCol" data-id="${f}">+ columna</button>` : ''}</th>`;
+    }).join('')}</tr></tbody>`;
+  });
+  return h + '</table></div>';
 }
 
-// Mes completo: las semanas una debajo de otra, con la misma planilla editable
+// Mes: como un calendario real. Filas de 7 días (lunes a domingo); el día 1 cae en su día de la semana
+// y los casilleros de antes y después del mes quedan vacíos.
 function xlsMes() {
-  const d = parseD(ui.turFecha), Y = d.getFullYear(), M = d.getMonth();
-  const ult = ymd(new Date(Y, M + 1, 0)); const out = [];
-  for (let l = lunes(ymd(new Date(Y, M, 1))); l <= ult; l = addDays(l, 7)) out.push(`<div class="xls-semtit">Semana del ${fmtDate(l)} al ${fmtDate(addDays(l, 6))}</div>${xlsGrid(semana(l), false)}`);
-  return `<div class="xls-mesbloque">${out.join('')}</div>`;
+  const d = parseD(ui.turFecha), Y = d.getFullYear(), M = d.getMonth(), nd = new Date(Y, M + 1, 0).getDate();
+  const off = (new Date(Y, M, 1).getDay() + 6) % 7, celdas = [];
+  for (let i = 0; i < off; i++) celdas.push(null);
+  for (let k = 1; k <= nd; k++) celdas.push(ymd(new Date(Y, M, k)));
+  while (celdas.length % 7) celdas.push(null);
+  const filas = []; for (let i = 0; i < celdas.length; i += 7) filas.push(celdas.slice(i, i + 7));
+  return `<div class="xls-mestit">${MESES[M].toUpperCase()} ${Y}</div>${xlsGrid(filas, false)}`;
 }
 
 // Pintar casilleros: tocar o arrastrar con la persona elegida
