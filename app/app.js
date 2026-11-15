@@ -18,7 +18,8 @@ const numIn = (v) => { // acepta "1500", "1500.5", "1.500,50", "1500,5"
 const fmtMoney = (n) => {
   const sym = state.config.moneda || '$';
   const v = Number(n) || 0;
-  return (v < 0 ? '−' : '') + sym + ' ' + Math.abs(v).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  const abs = Math.abs(v), txt = abs.toLocaleString('es-AR', { minimumFractionDigits: sym === '€' && abs % 1 ? 2 : 0, maximumFractionDigits: 2 });
+  return (v < 0 ? '−' : '') + (sym === '€' ? txt + ' €' : sym + ' ' + txt); // en España se escribe 1,60 €
 };
 const fmtNum = (n) => (Number(n) || 0).toLocaleString('es-AR', { maximumFractionDigits: 2 });
 const todayStr = () => { const d = new Date(); return ymd(d); };
