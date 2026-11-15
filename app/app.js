@@ -158,6 +158,7 @@ function goLive() {
     saveLocal(); render(); setTimeout(notificar, 500);
   }
   cloud.buffer = {};
+  if (typeof autoDiNardi === 'function') setTimeout(autoDiNardi, 0); // con los datos de la nube ya cargados
 }
 function startCloud() {
   cloud.cfg = getCloudCfg(); if (!cloud.cfg || !window.Cloud) return false;
@@ -191,7 +192,7 @@ function syncBadge() {
 }
 const needLogin = () => cloud.cfg && !cloud.uid;
 function vLogin() {
-  return `<div class="login-box card"><div class="row"><img src="icon-192.png" alt=""><div><h1>${esc(state.config.negocio || 'Gestión del Negocio')}</h1><p class="sub" style="margin:0">Iniciá sesión para ver tus datos en la PC y en el celular.</p></div></div>
+  return `<div class="login-box card"><div class="row"><img src="icono-192.png" alt=""><div><h1>${esc(state.config.negocio || 'Gestión del Negocio')}</h1><p class="sub" style="margin:0">Iniciá sesión para ver tus datos en la PC y en el celular.</p></div></div>
   <div class="form mt" style="grid-template-columns:1fr"><label class="f">Email<input id="lgMail" type="email" autocomplete="username" value="${esc(localStorage.getItem('lastEmail') || '')}"></label>
   <label class="f">Contraseña<input id="lgPass" type="password" autocomplete="current-password"></label></div>
   <p class="small c-out" id="lgErr"></p>
@@ -292,7 +293,7 @@ function vInicio() {
   const { vencidos, proximos } = avisos(), bajo = stockBajo();
   const recup = total.inversion > 0 ? (total.ganancia / total.inversion) * 100 : 0;
   return `
-  <h1>Hola 👋</h1><p class="sub">${new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+  <h1>Hola${state.config.saludo ? ' ' + esc(state.config.saludo) : ''} 👋</h1><p class="sub">${new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
   ${typeof bannerEjemplos === 'function' ? bannerEjemplos() : ''}
   ${selLocal()}
   <div class="row acciones" style="margin-bottom:16px">
@@ -480,6 +481,7 @@ function vAjustes() {
   <h1>Ajustes y respaldo</h1><p class="sub">Datos del negocio y copias de seguridad.</p>
   <div class="card"><div class="form">
     <label class="f full">Nombre del negocio<input id="cfgNeg" value="${esc(c.negocio)}"></label>
+    <label class="f full">Tu nombre (para el saludo de Inicio)<input id="cfgSaludo" value="${esc(c.saludo || '')}" placeholder="Ej: Paulo Nardi"></label>
     <label class="f">Símbolo de moneda<input id="cfgMon" value="${esc(c.moneda)}"></label>
     <label class="f">Avisar deudas con cuántos días de anticipación<input id="cfgDias" type="number" min="0" value="${c.avisoDias}"></label>
   </div><div class="modal-actions"><button class="pri" data-act="cfgSave">Guardar</button></div></div>
@@ -839,7 +841,7 @@ const ACTS = {
   calSel: (d) => { ui.calSel = d; render(); },
   calMove: (k) => { ui.calMes = addMonths(ui.calMes + '-01', Number(k)).slice(0, 7); render(); },
   calHoy: () => { ui.calMes = todayStr().slice(0, 7); ui.calSel = todayStr(); render(); },
-  cfgSave: () => { state.config.negocio = $('#cfgNeg').value.trim() || 'Mi Negocio'; state.config.moneda = $('#cfgMon').value.trim() || '$'; state.config.avisoDias = Math.max(0, Number($('#cfgDias').value) || 0); commit(); toast('Ajustes guardados ✔'); },
+  cfgSave: () => { state.config.negocio = $('#cfgNeg').value.trim() || 'Mi Negocio'; state.config.saludo = $('#cfgSaludo').value.trim(); state.config.moneda = $('#cfgMon').value.trim() || '$'; state.config.avisoDias = Math.max(0, Number($('#cfgDias').value) || 0); commit(); toast('Ajustes guardados ✔'); },
   exportJson, importJson,
   lgGo: async () => {
     const mail = $('#lgMail').value.trim(), pass = $('#lgPass').value; if (!mail || !pass) return ($('#lgErr').textContent = 'Completá email y contraseña.');
@@ -858,13 +860,14 @@ const ACTS = {
 // ---------- Avisos al abrir ----------
 function notificar() {
   const { vencidos, proximos } = avisos(); const n = vencidos.length + proximos.length; if (!n || !('Notification' in window)) return;
-  const send = () => { try { new Notification(state.config.negocio || 'Gestión del Negocio', { body: `${vencidos.length ? vencidos.length + ' vencido(s). ' : ''}${proximos.length ? proximos.length + ' por vencer pronto.' : ''} Abrí el calendario para ver el detalle.`, icon: 'icon-192.png' }); } catch {} };
+  const send = () => { try { new Notification(state.config.negocio || 'Gestión del Negocio', { body: `${vencidos.length ? vencidos.length + ' vencido(s). ' : ''}${proximos.length ? proximos.length + ' por vencer pronto.' : ''} Abrí el calendario para ver el detalle.`, icon: 'icono-192.png' }); } catch {} };
   if (Notification.permission === 'granted') send(); else if (Notification.permission !== 'denied') Notification.requestPermission().then((p) => p === 'granted' && send());
 }
 
 window.addEventListener('DOMContentLoaded', async function init() {
   await load();
-  startCloud();
+  const enNube = startCloud();
+  if (!enNube && typeof autoDiNardi === 'function') autoDiNardi();
   render();
   if (!cloud.cfg) setTimeout(notificar, 800);
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {

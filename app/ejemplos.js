@@ -101,20 +101,21 @@ const DINARDI = [
   { nombre: 'di Nardi Venegas', color: '#2e7d32', dir: 'Venegas 12', tel: '+34 928 43 54 73' },
 ];
 const esDiNardi = () => /nardi/i.test(state.config.negocio || '');
-function aplicarDiNardi() {
-  state.config.negocio = 'di Nardi'; state.config.moneda = '€';
+// Los locales que ya existen se renombran en orden (1º, 2º, 3º) y conservan su id, así sus turnos,
+// stock y plata siguen igual. Si hay menos de 3 se agregan los que faltan; si hay más, los demás no se tocan.
+function aplicarDiNardi(silencio) {
+  state.config.negocio = 'di Nardi'; state.config.moneda = '€'; state.config.dnAuto = true;
+  if (!state.config.saludo) state.config.saludo = 'Paulo Nardi';
   const lista = locales().map((x) => ({ ...x }));
-  const yaEsta = (n) => lista.some((x) => x.nombre.trim().toLowerCase() === n.toLowerCase());
-  DINARDI.forEach((d) => {
-    if (yaEsta(d.nombre)) return;
-    const libre = lista.find((x) => /^Local \d+$/i.test(x.nombre.trim())); // solo se renombran los que tienen el nombre de fábrica
-    if (libre) Object.assign(libre, { nombre: d.nombre, color: d.color, dir: d.dir, tel: d.tel });
-    else lista.push({ id: lista.length ? uid() : LOCAL0, nombre: d.nombre, color: d.color, dir: d.dir, tel: d.tel });
+  DINARDI.forEach((d, i) => {
+    if (lista[i]) Object.assign(lista[i], { nombre: d.nombre, color: d.color, dir: d.dir, tel: d.tel });
+    else lista.push({ id: uid(), nombre: d.nombre, color: d.color, dir: d.dir, tel: d.tel });
   });
   state.config.locales = lista;
-  commit(); toast('Listo: di Nardi con sus 3 locales ✔');
+  commit(); toast(silencio ? 'Los locales ahora tienen los nombres de di Nardi ✔' : 'Listo: di Nardi con sus 3 locales ✔');
 }
-const preguntarDiNardi = () => confirmBox(`Se pone el nombre <b>di Nardi</b>, la moneda en <b>€</b> y los 3 locales de la web: ${DINARDI.map((d) => `<b>${esc(d.nombre)}</b> (${esc(d.dir)})`).join(', ')}.<br><br>Los locales que ya tienen un nombre puesto no se tocan, y no se borra nada.`, aplicarDiNardi, 'Usar datos de di Nardi');
+function autoDiNardi() { if (!state.config.dnAuto) aplicarDiNardi(true); } // una sola vez por cuenta
+const preguntarDiNardi = () => confirmBox(`Se pone el nombre <b>di Nardi</b>, la moneda en <b>€</b> y los 3 locales de la web: ${DINARDI.map((d) => `<b>${esc(d.nombre)}</b> (${esc(d.dir)})`).join(', ')}.<br><br>Los locales que ya existen cambian de nombre en orden y conservan sus turnos, stock y plata. No se borra nada.`, aplicarDiNardi, 'Usar datos de di Nardi');
 
 function bannerEjemplos() {
   if (hayEjemplos()) return `<div class="card banner-ej"><div><b>📚 Estás viendo datos de ejemplo.</b> Son los que dicen <i>(ejemplo)</i> en Productos, Movimientos, Turnos, Catering, Cierre de caja y Calendario. Se pueden abrir, editar o borrar como cualquier otro.</div><button class="sm" data-act="ejBorrar">🧹 Borrar todos los ejemplos</button></div>`;
