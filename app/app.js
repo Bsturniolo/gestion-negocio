@@ -451,23 +451,32 @@ function vCalendario() {
   const days = []; for (let i = 0; i < 42; i++) { const d = new Date(start); d.setDate(start.getDate() + i); days.push(d); }
   const hoy = todayStr();
   const byDay = {}; state.eventos.forEach((e) => (byDay[e.fecha] = byDay[e.fecha] || []).push(e));
-  const sel = (byDay[ui.calSel] || []);
+  const cats = (state.caterings || []).filter((c) => c.estado !== 'cancelado'), catDia = {};
+  cats.forEach((c) => (catDia[c.fecha] = catDia[c.fecha] || []).push(c));
+  const sel = (byDay[ui.calSel] || []), selCat = (catDia[ui.calSel] || []).sort((a, b) => (a.hora || '').localeCompare(b.hora || ''));
   const pend = state.eventos.filter((e) => !e.hecho).sort((a, b) => a.fecha.localeCompare(b.fecha));
   const totPagar = pend.filter((e) => e.tipo === 'pagar' || e.tipo === 'prestamo_recibido').reduce((s, e) => s + (e.monto || 0), 0);
   const totCobrar = pend.filter((e) => e.tipo === 'cobrar' || e.tipo === 'prestamo_dado').reduce((s, e) => s + (e.monto || 0), 0);
   return `
-  <div class="spread"><div><h1>Calendario y avisos</h1><p class="sub">Deudas a pagar o cobrar, préstamos y recordatorios.</p></div><button class="pri" data-act="evNew" data-id="${ui.calSel}">➕ Nuevo aviso</button></div>
+  <div class="spread"><div><h1>Calendario y avisos</h1><p class="sub">Deudas a pagar o cobrar, préstamos, recordatorios y caterings.</p></div><button class="pri" data-act="evNew" data-id="${ui.calSel}">➕ Nuevo aviso</button></div>
   <div class="grid kpis" style="margin-bottom:14px">${kpi('Pendiente de pagar', fmtMoney(totPagar), 'c-out')}${kpi('Pendiente de cobrar', fmtMoney(totCobrar), 'c-in')}${kpi('Avisos pendientes', pend.length)}</div>
   <div class="card">
     <div class="spread" style="margin-bottom:10px"><button data-act="calMove" data-id="-1">◀</button><b style="font-size:17px">${MESES[Mo - 1]} ${Y}</b><div class="row"><button class="sm" data-act="calHoy">Hoy</button><button data-act="calMove" data-id="1">▶</button></div></div>
     <div class="cal">${['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map((d) => `<div class="dow">${d}</div>`).join('')}
-    ${days.map((d) => { const k = ymd(d); const evs = byDay[k] || []; return `<div class="day ${d.getMonth() !== Mo - 1 ? 'other' : ''} ${k === hoy ? 'today' : ''} ${k === ui.calSel ? 'sel' : ''}" data-act="calSel" data-id="${k}"><div>${d.getDate()}</div>${evs.slice(0, 3).map((e) => `<div class="ev ${e.tipo} ${e.hecho ? 'done' : ''}">${esc(e.titulo)}</div>`).join('')}${evs.length > 3 ? `<div class="small muted">+${evs.length - 3}</div>` : ''}</div>`; }).join('')}
+    ${days.map((d) => { const k = ymd(d); const evs = byDay[k] || [], cs = catDia[k] || [], n = evs.length + cs.length; return `<div class="day ${d.getMonth() !== Mo - 1 ? 'other' : ''} ${k === hoy ? 'today' : ''} ${k === ui.calSel ? 'sel' : ''}" data-act="calSel" data-id="${k}"><div>${d.getDate()}</div>${cs.slice(0, 2).map((c) => `<div class="ev catering ${c.estado === 'presupuesto' ? 'tentativo' : ''}">🍽️ ${esc(c.cliente || 'Catering')}</div>`).join('')}${evs.slice(0, Math.max(0, 3 - Math.min(2, cs.length))).map((e) => `<div class="ev ${e.tipo} ${e.hecho ? 'done' : ''}">${esc(e.titulo)}</div>`).join('')}${n > 3 ? `<div class="small muted">+${n - 3}</div>` : ''}</div>`; }).join('')}
     </div>
   </div>
   <h2>${fmtDate(ui.calSel)}</h2>
-  ${sel.length ? sel.map(evCard).join('') : `<div class="card empty">Nada para este día. <button class="link" data-act="evNew" data-id="${ui.calSel}">Agregar aviso</button></div>`}
+  ${selCat.map(catCardCal).join('')}
+  ${sel.length ? sel.map(evCard).join('') : selCat.length ? '' : `<div class="card empty">Nada para este día. <button class="link" data-act="evNew" data-id="${ui.calSel}">Agregar aviso</button></div>`}
   <h2>Todos los pendientes</h2>
   ${pend.length ? pend.map(evCard).join('') : '<div class="card empty">No hay deudas ni avisos pendientes. 👌</div>'}`;
+}
+function catCardCal(c) {
+  return `<div class="card cal-cat" style="margin-bottom:8px"><div class="spread"><div>🍽️ <b>Catering · ${esc(c.cliente || '')}</b> ${typeof catBadge === 'function' ? catBadge(c) : ''}
+  <div class="small muted">${c.hora ? 'A las ' + esc(c.hora) : 'Sin hora'}${c.armado ? ' · armado ' + esc(c.armado) : ''}${c.personas ? ` · ${c.personas} personas` : ''}${c.lugar ? ' · ' + esc(c.lugar) : ''}</div>
+  ${typeof catSaldo === 'function' && catCuenta(c) && catSaldo(c) > 0 ? `<div class="small c-out">Falta cobrar ${fmtMoney(catSaldo(c))}</div>` : ''}</div>
+  <div class="row"><b>${fmtMoney(catTotal(c))}</b><button class="sm" data-act="catEdit" data-id="${c.id}">Abrir</button></div></div></div>`;
 }
 function evCard(e) {
   const t = TIPOS_EV[e.tipo], venc = !e.hecho && e.fecha < todayStr();

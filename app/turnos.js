@@ -358,6 +358,14 @@ function paleta() {
     <button class="pin pin-borrar${ui.pincel === 'borrar' ? ' sel' : ''}" data-act="pincel" data-id="borrar">🧽 Borrar</button></div>`;
 }
 
+// Caterings del día (no cancelados), para marcarlos en la planilla
+const catsDia = (f) => (state.caterings || []).filter((c) => c.fecha === f && c.estado !== 'cancelado').sort((a, b) => (a.hora || '').localeCompare(b.hora || ''));
+function catAviso(per) {
+  const l = (state.caterings || []).filter((c) => c.fecha >= per.desde && c.fecha <= per.hasta && c.estado !== 'cancelado').sort((a, b) => (a.fecha + (a.hora || '')).localeCompare(b.fecha + (b.hora || '')));
+  if (!l.length) return '';
+  return `<div class="card cat-aviso no-print"><b>🍽️ ${l.length === 1 ? 'Hay un catering' : `Hay ${l.length} caterings`} ${per.plazo === 'día' ? 'este día' : per.plazo === 'semana' ? 'esta semana' : per.plazo === 'mes' ? 'este mes' : 'este año'}:</b>
+  <div class="cat-aviso-l">${l.slice(0, 20).map((c) => `<button class="sm" data-act="catEdit" data-id="${c.id}"><b>${DIAS[(parseD(c.fecha).getDay() + 6) % 7].slice(0, 3)} ${parseD(c.fecha).getDate()}/${parseD(c.fecha).getMonth() + 1}${c.hora ? ' · ' + esc(c.hora) : ''}</b> ${esc(c.cliente || 'Catering')}${c.personas ? ` · ${c.personas} pers.` : ''}${c.estado === 'presupuesto' ? ' <i>(sin confirmar)</i>' : ''}</button>`).join('')}</div></div>`;
+}
 function tCal() {
   const v = ui.calVista, per = periodo(), todos = verTodos(), editable = v !== 'anio' && !todos, lid = localActivo();
   const vistas = [['dia', 'Día'], ['semana', 'Semana'], ['mes', 'Mes'], ['anio', 'Año']];
@@ -371,6 +379,7 @@ function tCal() {
     ${todos ? '<p class="small muted" style="margin:8px 0 0">Estás viendo <b>todos los locales juntos</b>. Para cargar o pintar turnos, elegí un local arriba.</p>' : editable ? `<div class="mt hide-m">${paleta()}</div><p class="small muted hide-m" style="margin:6px 0 0">Elegí a la persona arriba y tocá o arrastrá sobre cualquier cuadrado para ponerla ahí. Tocá un cuadrado que ya es suyo para sacarlo. Tocá la banda amarilla para escribir una nota del día.</p>` : '<p class="small muted" style="margin:8px 0 0">Tocá un día para abrirlo y editarlo.</p>'}</div>
   <div class="print-title">${esc(state.config.negocio)}${multiLocal() ? ' · ' + esc(todos ? 'Todos los locales' : localInfo(lid).nombre) : ''} · Turnos · ${per.nombre}</div>
   ${avisoChoques(per)}
+  ${catAviso(per)}
   ${todos ? tablaLocales(per) : ''}
   ${editable ? `<div class="paleta-dock solo-m">${paleta()}<div class="small muted">Elegí a la persona y tocá o arrastrá los cuadrados. Tocá uno suyo para sacarlo. Para mover la planilla con el dedo, destildá Pintar.</div></div>` : ''}
   ${cuerpo}
@@ -394,7 +403,7 @@ function xlsGrid(dias, grande, lid = localActivo(), editable = true) {
   filasDias.forEach((fila, r) => {
     const vacio = (i) => `<th class="xls-vacio" colspan="${lanes[i] + 1}"></th>`;
     h += `<tbody class="xls-sem${r ? ' xls-sem-sig' : ''}">
-    <tr>${fila.map((f, i) => (f ? `<th class="xls-num" colspan="${lanes[i] + 1}"${editable ? ` data-act="turNota" data-id="${f}"` : ''}><span>${parseD(f).getDate()}</span>${docs[f] && docs[f].nota ? `<em class="xls-nota">${esc(docs[f].nota)}</em>` : ''}</th>` : `<th class="xls-num xls-num-vacio" colspan="${lanes[i] + 1}"></th>`)).join('')}</tr>
+    <tr>${fila.map((f, i) => (f ? `<th class="xls-num" colspan="${lanes[i] + 1}"${editable ? ` data-act="turNota" data-id="${f}"` : ''}><span>${parseD(f).getDate()}</span>${docs[f] && docs[f].nota ? `<em class="xls-nota">${esc(docs[f].nota)}</em>` : ''}${catsDia(f).map((c) => `<b class="xls-cat" data-act="catEdit" data-id="${c.id}">🍽️ ${esc(c.cliente || 'Catering')}${c.hora ? ' ' + esc(c.hora) : ''}</b>`).join('')}</th>` : `<th class="xls-num xls-num-vacio" colspan="${lanes[i] + 1}"></th>`)).join('')}</tr>
     <tr>${fila.map((f, i) => (f ? `<th class="xls-dia" colspan="${lanes[i] + 1}">${DIAS_UP[(parseD(f).getDay() + 6) % 7]}</th>` : vacio(i))).join('')}</tr>`;
     for (const m of horas) {
       h += '<tr>' + fila.map((f, i) => {
@@ -619,7 +628,7 @@ function xlsMesCel(lid) {
   for (let day = 1; day <= nd; day++) {
     const f = ymd(new Date(Y, M, day)), docs = state.turnos.filter((t) => t.fecha === f && enLocal(t, lid));
     const ppl = state.personal.map((p) => [p, docs.reduce((s, t) => s + ((t.celdas || {})[p.id] || []).length * (t.intervalo || 60) / 60, 0)]).filter(([, h]) => h);
-    cells += `<td class="mc-dia${f === todayStr() ? ' hoy' : ''}" data-act="calIrDia" data-id="${f}"><div class="mc-num">${day}</div>${ppl.map(([p, h]) => `<div class="mc-chip" style="background:${p.color};color:${textoSobre(p.color)}">${esc(p.nombre.slice(0, 3))} ${fmtNum(h)}</div>`).join('')}</td>`;
+    cells += `<td class="mc-dia${f === todayStr() ? ' hoy' : ''}" data-act="calIrDia" data-id="${f}"><div class="mc-num">${day}${catsDia(f).length ? ' <span class="mc-cat" title="Catering">🍽️</span>' : ''}</div>${ppl.map(([p, h]) => `<div class="mc-chip" style="background:${p.color};color:${textoSobre(p.color)}">${esc(p.nombre.slice(0, 3))} ${fmtNum(h)}</div>`).join('')}</td>`;
     if ((off + day) % 7 === 0 && day < nd) cells += '</tr><tr>';
   }
   const resto = (7 - ((off + nd) % 7)) % 7; for (let i = 0; i < resto; i++) cells += '<td class="mc-vacio"></td>';
