@@ -366,3 +366,20 @@ tr.clic{cursor:pointer}tr.clic:hover td{background:#fcf6f0}
 .mb6{margin-bottom:6px}
 @media print{ #catPrintArea .hoja-alerta{border:2px solid #000;padding:8px;margin:10px 0} }
 @media (max-width:760px){ .cat-fila.ma{grid-template-columns:90px 1fr 1fr}.cat-fila.ma .d{grid-area:1/1/2/3}.cat-fila.ma button{grid-area:1/3;justify-self:end}.cat-fila.ma .c{grid-area:2/1}.cat-fila.ma .ci{grid-area:2/2}.cat-fila.ma .cv{grid-area:2/3} }
+
+/* Borrar personal y turnos */
+.per-acc{gap:8px;justify-content:flex-end;flex-wrap:nowrap}
+.opc-borrar{display:grid;gap:10px;margin:14px 0}
+.opc-borrar button{flex-direction:column;align-items:flex-start;text-align:left;gap:4px;padding:12px 14px;white-space:normal}
+.opc-borrar button span{font-size:13px;font-weight:400;opacity:.9}
+.opc-borrar button.danger{border-color:#e9b8b2;background:var(--danbg)}
+.borr-lista{display:grid;gap:12px}
+.borr-dia{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--card)}
+.borr-fila{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line);margin-top:8px}
+.borr-fila>span:nth-child(2){flex:1}
+.borr-fila button{margin-left:auto;min-width:44px;min-height:40px;justify-content:center}
+@media (max-width:760px){ .per-acc{flex-direction:column;align-items:stretch} }
+.per-cards{display:grid;gap:12px}
+.per-card-acc{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.per-card-acc button{justify-content:center;min-height:46px}
+@media (max-width:760px){ .tur-horario .form{grid-template-columns:1fr 1fr!important}.tur-horario .modal-actions{position:static;box-shadow:none;margin:12px 0 0;padding:0;background:none;border:0} }

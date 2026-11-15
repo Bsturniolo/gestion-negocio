@@ -16,7 +16,7 @@ const addDays = (f, k) => { const d = parseD(f); d.setDate(d.getDate() + k); ret
 const semana = (f) => { const l = lunes(f); return [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(l, i)); };
 const turCfg = () => Object.assign({ inicio: 6, fin: 22, intervalo: 60, columnas: 8 }, state.config.turnos || {});
 const persona = (id) => state.personal.find((p) => p.id === id);
-const activos = () => state.personal.filter((p) => p.activo !== false).sort((a, b) => (a.orden || 0) - (b.orden || 0) || a.nombre.localeCompare(b.nombre));
+const activos = () => state.personal.filter((p) => p.activo !== false && !p.borrado).sort((a, b) => (a.orden || 0) - (b.orden || 0) || a.nombre.localeCompare(b.nombre));
 // ---------- Locales: varias sucursales en la misma cuenta ----------
 // Cada día de turnos pertenece a un local. Los días del primer local conservan su id de siempre (la fecha)
 // y los de los demás locales usan "fecha@local", así lo que ya estaba cargado no se toca.
@@ -119,23 +119,101 @@ function tMes() {
 
 function tPersonal() {
   const c = turCfg();
-  const lista = state.personal.slice().sort((a, b) => (a.activo === false) - (b.activo === false) || (a.orden || 0) - (b.orden || 0) || a.nombre.localeCompare(b.nombre));
+  const lista = state.personal.filter((p) => !p.borrado).sort((a, b) => (a.activo === false) - (b.activo === false) || (a.orden || 0) - (b.orden || 0) || a.nombre.localeCompare(b.nombre));
   return `<div class="spread" style="margin-bottom:12px"><p class="muted" style="margin:0">Cada persona tiene su color en la planilla.</p><button class="pri" data-act="perNew">➕ Agregar persona</button></div>
-  ${lista.length ? `<div class="tablewrap"><table><thead><tr><th>Nombre</th><th class="num">Meta semanal</th><th class="num">Meta mensual</th><th>Estado</th><th></th></tr></thead><tbody>
-  ${lista.map((p) => `<tr${p.activo === false ? ' class="muted"' : ''}><td><span class="sw" style="background:${p.color}"></span> <b>${esc(p.nombre)}</b>${p.rol ? ` <span class="small muted">· ${esc(p.rol)}</span>` : ''}</td><td class="num">${p.metaSemanal ? fmtH(p.metaSemanal) : '–'}</td><td class="num">${metaMes(p) ? fmtH(metaMes(p)) + (p.metaMensual ? '' : ' <span class="small muted">(auto)</span>') : '–'}</td><td>${p.activo === false ? '<span class="badge gray">Ya no trabaja</span>' : '<span class="badge in">Activo</span>'}</td><td class="right"><button class="sm" data-act="perEdit" data-id="${p.id}">Editar</button></td></tr>`).join('')}
+  ${lista.length ? `<div class="per-cards solo-m">${lista.map((p) => `<div class="card per-card${p.activo === false ? ' muted' : ''}"><div class="spread"><div><span class="sw" style="background:${p.color}"></span> <b>${esc(p.nombre)}</b>${p.rol ? `<div class="small muted">${esc(p.rol)}</div>` : ''}</div>${p.activo === false ? '<span class="badge gray">Ya no trabaja</span>' : '<span class="badge in">Activo</span>'}</div>
+    <div class="small muted mt">Meta: ${p.metaSemanal ? fmtH(p.metaSemanal) + ' por semana' : 'sin meta'}${metaMes(p) ? ' · ' + fmtH(metaMes(p)) + ' por mes' : ''}</div>
+    <div class="per-card-acc"><button data-act="perEdit" data-id="${p.id}">✏️ Editar</button><button class="danger" data-act="perDel" data-id="${p.id}">🗑 Borrar</button></div></div>`).join('')}</div>
+  <div class="tablewrap hide-m"><table><thead><tr><th>Nombre</th><th class="num">Meta semanal</th><th class="num">Meta mensual</th><th>Estado</th><th></th></tr></thead><tbody>
+  ${lista.map((p) => `<tr${p.activo === false ? ' class="muted"' : ''}><td><span class="sw" style="background:${p.color}"></span> <b>${esc(p.nombre)}</b>${p.rol ? ` <span class="small muted">· ${esc(p.rol)}</span>` : ''}</td><td class="num">${p.metaSemanal ? fmtH(p.metaSemanal) : '–'}</td><td class="num">${metaMes(p) ? fmtH(metaMes(p)) + (p.metaMensual ? '' : ' <span class="small muted">(auto)</span>') : '–'}</td><td>${p.activo === false ? '<span class="badge gray">Ya no trabaja</span>' : '<span class="badge in">Activo</span>'}</td><td class="right"><div class="row per-acc"><button class="sm" data-act="perEdit" data-id="${p.id}">✏️ Editar</button><button class="sm danger" data-act="perDel" data-id="${p.id}">🗑 Borrar</button></div></td></tr>`).join('')}
   </tbody></table></div>` : '<div class="card empty">Agregá a las personas que trabajan, cada una con su color.</div>'}
+  ${borradosHTML()}
   <h2>Locales</h2>
   <div class="tablewrap"><table><thead><tr><th>Local</th><th class="num">Días con turnos cargados</th><th></th></tr></thead><tbody>
   ${locales().map((l) => `<tr><td><span class="sw" style="background:${l.color}"></span> <b>${esc(l.nombre)}</b></td><td class="num">${state.turnos.filter((t) => localDe(t) === l.id).length}</td><td class="right"><button class="sm" data-act="locEdit" data-id="${l.id}">Editar</button></td></tr>`).join('')}
   </tbody></table></div>
   <div class="row mt"><button data-act="locNew">➕ Agregar local</button><span class="small muted">El personal es el mismo para todos los locales. Si alguien trabaja en dos, sus horas se suman para la meta.</span></div>
   <h2>Horario de la planilla</h2>
-  <div class="card"><div class="form" style="grid-template-columns:repeat(4,1fr)">
+  <div class="card tur-horario"><div class="form" style="grid-template-columns:repeat(4,1fr)">
     <label class="f">Desde la hora<input id="tcIni" type="number" min="0" max="23" value="${c.inicio}"></label>
     <label class="f">Hasta la hora<input id="tcFin" type="number" min="1" max="24" value="${c.fin}"></label>
     <label class="f">Cada casillero vale<select id="tcIv"><option value="60" ${c.intervalo === 60 ? 'selected' : ''}>1 hora</option><option value="30" ${c.intervalo === 30 ? 'selected' : ''}>media hora</option></select></label>
     <label class="f">Columnas por día<input id="tcCol" type="number" min="1" max="20" value="${c.columnas}"></label>
   </div><p class="small muted">Los días ya cargados mantienen su tamaño de casillero; el cambio se aplica a los días nuevos.</p><div class="modal-actions"><button class="pri" data-act="turCfgSave">Guardar horario</button></div></div>`;
+}
+
+// ---------- Borrar personal ----------
+// Borrar a alguien lo saca de la lista y de la planilla, pero sus horas quedan guardadas (con su nombre)
+// hasta que se decida borrarlas también.
+const horasTotales = (pid) => horasRango(pid, '0000-01-01', '9999-12-31');
+function borrarHorasDe(pid) {
+  state.turnos.forEach((t) => { ensureSlots(t); let cambio = false; for (const k of Object.keys(t.slots)) if (t.slots[k] === pid) { delete t.slots[k]; cambio = true; } if (cambio) derivar(t); });
+  limpiarVacios();
+}
+function quitarPersona(p, conHoras) {
+  if (conHoras || !horasTotales(p.id)) { borrarHorasDe(p.id); state.personal = state.personal.filter((x) => x.id !== p.id); }
+  else Object.assign(p, { borrado: true, activo: false });
+  if (ui.pincel === p.id) ui.pincel = null;
+  closeModal(); commit(); toast(conHoras ? 'Persona y horas borradas' : 'Persona borrada. Sus horas quedan guardadas ✔');
+}
+function perBorrar(p) {
+  const h = horasTotales(p.id);
+  if (!h) return confirmBox(`Se va a borrar a <b>${esc(p.nombre)}</b>. No tiene horas cargadas.`, () => quitarPersona(p, true), 'Borrar');
+  openModal(`<h3>Borrar a ${esc(p.nombre)}</h3><p>Tiene <b>${fmtH(h)}</b> cargadas en la planilla. ¿Qué hacemos con esas horas?</p>
+  <div class="opc-borrar">
+    <button class="pri" id="pbGuardar"><b>Borrar a la persona y guardar sus horas</b><span>Sale de la lista y de la planilla para cargar, pero lo que trabajó sigue en los turnos y en los resúmenes.</span></button>
+    <button class="danger" id="pbTodo"><b>Borrar a la persona y todas sus horas</b><span>Desaparece todo lo que tenía cargado. No se puede deshacer.</span></button>
+  </div><div class="modal-actions"><button data-act="close">Cancelar</button></div>`, (box) => {
+    $('#pbGuardar', box).onclick = () => quitarPersona(p, false);
+    $('#pbTodo', box).onclick = () => confirmBox(`¿Seguro? Se borran <b>${esc(p.nombre)}</b> y sus <b>${fmtH(h)}</b>.`, () => quitarPersona(p, true), 'Borrar todo');
+  });
+}
+function borradosHTML() {
+  const l = state.personal.filter((p) => p.borrado);
+  if (!l.length) return '';
+  return `<h2>Personas borradas</h2><p class="small muted" style="margin-top:0">Ya no aparecen para cargar turnos, pero sus horas siguen guardadas.</p>
+  <div class="tablewrap"><table><tbody>${l.map((p) => `<tr class="muted"><td><span class="sw" style="background:${p.color}"></span> <b>${esc(p.nombre)}</b></td><td class="num">${fmtH(horasTotales(p.id))} guardadas</td><td class="right"><div class="row per-acc"><button class="sm" data-act="perVolver" data-id="${p.id}">↩️ Recuperar</button><button class="sm danger" data-act="perHorasDel" data-id="${p.id}">🗑 Borrar sus horas</button></div></td></tr>`).join('')}</tbody></table></div>`;
+}
+
+// ---------- Borrar turnos ya cargados ----------
+function bloquesPeriodo(desde, hasta, lid) { // [{f, pid, a, b, h}] por persona y tramo seguido
+  const out = [];
+  state.turnos.filter((t) => t.fecha >= desde && t.fecha <= hasta && localDe(t) === lid).sort((x, y) => (x.fecha < y.fecha ? -1 : 1)).forEach((t) => {
+    const iv = t.intervalo || 60;
+    Object.entries(t.celdas || {}).forEach(([pid, arr]) => rango(arr || [], iv).forEach(([a, b]) => out.push({ f: t.fecha, pid, a, b, h: (b - a) / 60 })));
+    const txt = Object.entries(slotsDia(t)).filter(([, v]) => v && v.startsWith('t:')).length;
+    if (txt) out.push({ f: t.fecha, pid: '', txt, a: 0, b: 0, h: 0 });
+  });
+  return out.sort((x, y) => (x.f < y.f ? -1 : x.f > y.f ? 1 : x.a - y.a));
+}
+function borrarBloque(f, pid, a, b, lid) {
+  const d = diaDoc(f, lid); if (!d) return; ensureSlots(d);
+  for (const k of Object.keys(d.slots)) { const m = Number(k.split('_')[1]), v = d.slots[k]; if (pid ? v === pid && m >= a && m < b : v && v.startsWith('t:')) delete d.slots[k]; }
+  derivar(d); limpiarVacios();
+}
+function turBorrarForm() {
+  const per = periodo(), lid = localActivo();
+  const pinta = () => {
+    const l = bloquesPeriodo(per.desde, per.hasta, lid), dias = [...new Set(l.map((x) => x.f))];
+    return l.length ? `<div class="borr-lista">${dias.map((f) => `<div class="borr-dia"><div class="spread"><b>${DIAS[(parseD(f).getDay() + 6) % 7]} ${fmtDate(f)}</b><button class="sm danger" data-bd="${f}">Borrar el día entero</button></div>
+      ${l.filter((x) => x.f === f).map((x) => { const p = persona(x.pid); return `<div class="borr-fila">${x.pid ? `<span class="badge" style="background:${p ? p.color : '#999'};color:${textoSobre(p ? p.color : '#999999')}">${esc(p ? p.nombre : 'Sin nombre')}</span> <span>${hhmm(x.a)} a ${hhmm(x.b)} · ${fmtH(x.h)}</span>` : `<span>✏️ Textos escritos en la planilla</span>`}<button class="sm" data-bb="${x.f}|${x.pid}|${x.a}|${x.b}" aria-label="Borrar">✕</button></div>`; }).join('')}</div>`).join('')}</div>
+      <div class="mt"><button class="danger" id="bTodo">Borrar todo lo de ${per.plazo === 'día' ? 'este día' : per.plazo === 'mes' ? 'este mes' : 'esta semana'}</button></div>`
+      : '<p class="muted">No hay turnos cargados en este período.</p>';
+  };
+  openModal(`<h3>Borrar turnos</h3><p class="small muted" style="margin-top:0">${esc(per.nombre)}${multiLocal() ? ' · ' + esc(localInfo(lid).nombre) : ''}. Tocá ✕ para sacar un turno.</p><div id="bCuerpo">${pinta()}</div>
+  <div class="modal-actions"><button class="pri" data-act="close">Listo</button></div>`, (box) => {
+    const refrescar = () => { commit(); $('#bCuerpo', box).innerHTML = pinta(); };
+    box.onclick = (e) => {
+      const bb = e.target.closest('[data-bb]'), bd = e.target.closest('[data-bd]');
+      if (bb) { const [f, pid, a, b] = bb.dataset.bb.split('|'); borrarBloque(f, pid, Number(a), Number(b), lid); refrescar(); toast('Turno borrado'); }
+      else if (bd) { const f = bd.dataset.bd; state.turnos = state.turnos.filter((t) => !(t.fecha === f && localDe(t) === lid)); refrescar(); toast('Día borrado'); }
+      else if (e.target.id === 'bTodo') {
+        const n = bloquesPeriodo(per.desde, per.hasta, lid).length;
+        if (box.dataset.seguro !== '1') { box.dataset.seguro = '1'; e.target.textContent = `Tocá otra vez para borrar los ${n} turnos`; return; } // segundo toque = confirmación
+        state.turnos = state.turnos.filter((t) => !(t.fecha >= per.desde && t.fecha <= per.hasta && localDe(t) === lid)); box.dataset.seguro = ''; refrescar(); toast('Turnos borrados');
+      }
+    };
+  });
 }
 
 // ---------- Formularios ----------
@@ -151,12 +229,12 @@ function perForm(p) {
     <label class="f">Meta de horas por día<input name="metaDiaria" inputmode="decimal" value="${p.metaDiaria || ''}" placeholder="Vacío = semanal ÷ 6"></label>
     <label class="f">Meta de horas por mes<input name="metaMensual" inputmode="decimal" value="${p.metaMensual || ''}" placeholder="Vacío = semanal × 4,33"></label>
     ${isNew ? '' : `<label class="f full" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" name="inactivo" ${p.activo === false ? 'checked' : ''} style="width:auto"> <span>Ya no trabaja (se oculta de la planilla pero se guardan sus horas)</span></label>`}
-  </div><div class="modal-actions">${isNew ? '' : '<button class="danger" id="perDel">Eliminar</button>'}<button data-act="close">Cancelar</button><button class="pri" id="perOk">Guardar</button></div>`, (box) => {
+  </div><div class="modal-actions">${isNew ? '' : '<button class="danger" id="perDel">🗑 Borrar</button>'}<button data-act="close">Cancelar</button><button class="pri" id="perOk">Guardar</button></div>`, (box) => {
     const setC = (c) => { color = c; $$('.col', box).forEach((b) => b.classList.toggle('sel', b.dataset.c === c)); const pv = $('#perPrev', box); pv.style.background = c; pv.style.color = textoSobre(c); };
     $('.colores', box).onclick = (e) => { const b = e.target.closest('button.col'); if (b) setC(b.dataset.c); };
     $('#perColor', box).oninput = (e) => setC(e.target.value);
     $('[name=nombre]', box).oninput = (e) => ($('#perPrev', box).textContent = e.target.value || 'Nombre');
-    if (!isNew) $('#perDel', box).onclick = () => confirmBox(`Se va a eliminar a <b>${esc(p.nombre)}</b> <b>y todas sus horas cargadas</b>. Si solo dejó de trabajar, mejor tildá "Ya no trabaja".`, () => { state.personal = state.personal.filter((x) => x.id !== p.id); state.turnos.forEach((t) => { ensureSlots(t); for (const k of Object.keys(t.slots)) if (t.slots[k] === p.id) delete t.slots[k]; derivar(t); }); limpiarVacios(); commit(); }, 'Eliminar');
+    if (!isNew) $('#perDel', box).onclick = () => perBorrar(p);
     $('#perOk', box).onclick = () => {
       const v = vals(box); if (!v.nombre) return toast('Poné el nombre');
       const data = { nombre: v.nombre, rol: v.rol, color, metaSemanal: numIn(v.metaSemanal), metaDiaria: numIn(v.metaDiaria), metaMensual: numIn(v.metaMensual), activo: !v.inactivo };
@@ -241,6 +319,10 @@ Object.assign(ACTS, {
   turCfgSave: () => { const ini = Math.max(0, Math.min(23, Number($('#tcIni').value) || 0)), fin = Math.max(ini + 1, Math.min(24, Number($('#tcFin').value) || 24)); state.config.turnos = { inicio: ini, fin, intervalo: Number($('#tcIv').value) || 60, columnas: Math.max(1, Math.min(20, Number($('#tcCol').value) || 8)) }; commit(); toast('Horario guardado ✔'); },
   perNew: () => perForm(),
   perEdit: (id) => perForm(persona(id)),
+  perDel: (id) => { const p = persona(id); if (p) perBorrar(p); },
+  perVolver: (id) => { const p = persona(id); if (!p) return; delete p.borrado; p.activo = true; commit(); toast(`${p.nombre} volvió a la lista ✔`); },
+  perHorasDel: (id) => { const p = persona(id); if (!p) return; confirmBox(`Se borran las <b>${fmtH(horasTotales(p.id))}</b> de <b>${esc(p.nombre)}</b> y la persona desaparece del todo. No se puede deshacer.`, () => quitarPersona(p, true), 'Borrar sus horas'); },
+  turBorrar: () => turBorrarForm(),
 });
 
 // ================= Calendario estilo planilla (Día / Semana / Mes / Año) =================
@@ -285,7 +367,7 @@ function tCal() {
   return `<div class="card no-print cal-barra" style="margin-bottom:10px"><div class="spread">
     <div class="tabs" style="margin:0">${vistas.map(([k, l]) => `<button class="${v === k ? 'on' : ''}" data-act="calVista" data-id="${k}">${l}</button>`).join('')}</div>
     <div class="row cal-nav"><button data-act="calMov" data-id="-1" aria-label="Anterior">◀</button><b><span class="solo-d">${per.nombre}</span><span class="solo-m">${per.corto}</span></b><button data-act="calMov" data-id="1" aria-label="Siguiente">▶</button><button class="sm" data-act="turHoy">Hoy</button></div>
-    <div class="row">${todos ? '' : '<button class="pri sm" data-act="turRapido">➕ Cargar turno</button>'}${!todos && (v === 'dia' || v === 'semana') ? `<button class="sm" data-act="${v === 'dia' ? 'turCopiar' : 'turCopiarSem'}" ${v === 'dia' ? 'data-id="-7"' : ''}>Copiar ${v === 'dia' ? 'de la semana pasada' : 'semana anterior'}</button>` : ''}<button class="sm hide-m" data-act="turPrint">🖨 Imprimir</button>${editable ? `<label class="small row" style="gap:6px"><input type="checkbox" data-act="turPintarTog" ${ui.turPintar ? 'checked' : ''} style="width:auto"> Pintar</label>` : ''}</div></div>
+    <div class="row">${todos ? '' : '<button class="pri sm" data-act="turRapido">➕ Cargar turno</button>'}${!todos && (v === 'dia' || v === 'semana') ? `<button class="sm" data-act="${v === 'dia' ? 'turCopiar' : 'turCopiarSem'}" ${v === 'dia' ? 'data-id="-7"' : ''}>Copiar ${v === 'dia' ? 'de la semana pasada' : 'semana anterior'}</button>` : ''}${!todos && v !== 'anio' ? '<button class="sm danger" data-act="turBorrar">🗑 Borrar turnos</button>' : ''}<button class="sm hide-m" data-act="turPrint">🖨 Imprimir</button>${editable ? `<label class="small row" style="gap:6px"><input type="checkbox" data-act="turPintarTog" ${ui.turPintar ? 'checked' : ''} style="width:auto"> Pintar</label>` : ''}</div></div>
     ${todos ? '<p class="small muted" style="margin:8px 0 0">Estás viendo <b>todos los locales juntos</b>. Para cargar o pintar turnos, elegí un local arriba.</p>' : editable ? `<div class="mt hide-m">${paleta()}</div><p class="small muted hide-m" style="margin:6px 0 0">Elegí a la persona arriba y tocá o arrastrá sobre cualquier cuadrado para ponerla ahí. Tocá un cuadrado que ya es suyo para sacarlo. Tocá la banda amarilla para escribir una nota del día.</p>` : '<p class="small muted" style="margin:8px 0 0">Tocá un día para abrirlo y editarlo.</p>'}</div>
   <div class="print-title">${esc(state.config.negocio)}${multiLocal() ? ' · ' + esc(todos ? 'Todos los locales' : localInfo(lid).nombre) : ''} · Turnos · ${per.nombre}</div>
   ${avisoChoques(per)}
