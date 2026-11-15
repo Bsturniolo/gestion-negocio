@@ -459,7 +459,7 @@ Object.assign(ACTS, {
 // ================= Locales =================
 function selectorLocal() {
   const ls = locales(), cur = verTodos() ? '*' : localActivo();
-  return `<div class="locales no-print"><span class="small muted">Local:</span>${ls.map((l) => `<button class="loc${cur === l.id ? ' sel' : ''}" data-act="turLocal" data-id="${l.id}" style="--lc:${l.color}">🏪 ${esc(l.nombre)}</button>`).join('')}${ls.length > 1 ? `<button class="loc${cur === '*' ? ' sel' : ''}" data-act="turLocal" data-id="*" style="--lc:#37474f">Todos juntos</button>` : ''}<button class="sm link" data-act="locNew">+ Agregar local</button></div>`;
+  return `<div class="locales no-print"><span class="small muted">Local:</span>${ls.map((l) => `<button class="loc${cur === l.id ? ' sel' : ''}" data-act="locChip" data-id="${l.id}" style="--lc:${l.color}" title="${cur === l.id ? 'Tocá de nuevo para cambiarle el nombre' : ''}">🏪 ${esc(l.nombre)}${cur === l.id ? ' <span class="loc-lapiz">✏️</span>' : ''}</button>`).join('')}${ls.length > 1 ? `<button class="loc${cur === '*' ? ' sel' : ''}" data-act="turLocal" data-id="*" style="--lc:#37474f">Todos juntos</button>` : ''}<button class="sm link" data-act="locNew">+ Agregar local</button><button class="sm link" data-act="locLista">✏️ Cambiar nombres</button></div>`;
 }
 // Alguien anotado en dos locales a la misma hora
 function choques(desde, hasta) {
@@ -525,6 +525,8 @@ Object.assign(ACTS, {
   turLocal: (id) => { ui.turLocal = id; try { localStorage.setItem('turLocal', id); } catch {} render(); },
   turIrChoque: (x) => { const [f, l] = String(x).split('|'); if (l === CATER.id) return go('catering'); ui.turFecha = f; ui.calVista = 'dia'; ACTS.turLocal(l); window.scrollTo(0, 0); },
   locNew: () => locForm(),
+  locLista: () => locLista(),
+  locChip: (id) => (id !== '*' && !verTodos() && id === localActivo() ? locForm(localInfo(id)) : ACTS.turLocal(id)),
   locEdit: (id) => locForm(localInfo(id)),
 });
 
@@ -540,4 +542,20 @@ function xlsMesCel(lid) {
   }
   const resto = (7 - ((off + nd) % 7)) % 7; for (let i = 0; i < resto; i++) cells += '<td class="mc-vacio"></td>';
   return `<div class="xls-mestit">${MESES[M].toUpperCase()} ${Y}</div><table class="mes-cel"><thead><tr>${['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((x) => `<th>${x}</th>`).join('')}</tr></thead><tbody><tr>${cells}</tr></tbody></table><p class="small muted">Tocá un día para verlo y cargar turnos.</p>`;
+}
+
+// Cambiar el nombre de todos los locales de una vez
+function locLista() {
+  const ls = locales();
+  openModal(`<h3>Nombres de los locales</h3><p class="small muted" style="margin-top:0">Escribí el nombre nuevo de cada local y tocá Guardar.</p>
+  <div id="locNoms">${ls.map((l) => `<div class="loc-edit" data-id="${l.id}"><span class="sw" style="background:${l.color};width:18px;height:18px"></span><input value="${esc(l.nombre)}" placeholder="Nombre del local"><button type="button" class="sm" data-ed="${l.id}">Color / borrar</button></div>`).join('')}</div>
+  <div class="modal-actions"><button data-act="close">Cancelar</button><button class="pri" id="locNomOk">Guardar</button></div>`, (box) => {
+    const guardar = () => {
+      const lista = locales().map((x) => ({ ...x }));
+      for (const row of $$('.loc-edit', box)) { const x = lista.find((y) => y.id === row.dataset.id), n = $('input', row).value.trim(); if (!n) { toast('Ningún local puede quedar sin nombre'); return false; } if (x) x.nombre = n; }
+      state.config.locales = lista; return true;
+    };
+    box.onclick = (e) => { const b = e.target.closest('[data-ed]'); if (b && guardar()) { save(); locForm(localInfo(b.dataset.ed)); } };
+    $('#locNomOk', box).onclick = () => { if (guardar()) { closeModal(); commit(); toast('Nombres guardados ✔'); } };
+  });
 }

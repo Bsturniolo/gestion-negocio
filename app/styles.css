@@ -324,3 +324,6 @@ tr.clic{cursor:pointer}tr.clic:hover td{background:#f6faf8}
   h2{margin-top:26px}
   .tabs{gap:8px;margin-bottom:16px}
 }
+
+.loc-edit{display:grid;grid-template-columns:22px 1fr auto;gap:8px;align-items:center;margin-bottom:8px}
+.loc-lapiz{font-size:12px;margin-left:2px}

@@ -477,6 +477,7 @@ function vAjustes() {
     <label class="f">Símbolo de moneda<input id="cfgMon" value="${esc(c.moneda)}"></label>
     <label class="f">Avisar deudas con cuántos días de anticipación<input id="cfgDias" type="number" min="0" value="${c.avisoDias}"></label>
   </div><div class="modal-actions"><button class="pri" data-act="cfgSave">Guardar</button></div></div>
+  ${typeof locales === 'function' ? `<h2>Locales</h2><div class="card"><div class="row" style="flex-wrap:wrap;gap:8px">${locales().map((l) => `<button data-act="locEdit" data-id="${l.id}"><span class="sw" style="background:${l.color}"></span> ${esc(l.nombre)} ✏️</button>`).join('')}<button data-act="locNew">+ Agregar local</button></div><p class="small muted" style="margin-bottom:0">Tocá un local para cambiarle el nombre o el color.</p></div>` : ''}
   <h2>Nube (sincronizar PC y celular)</h2>
   <div class="card">${cloud.cfg ? `
     <p style="margin-top:0">${cloud.uid ? `Sesión iniciada como <b>${esc(cloud.email)}</b>. Todo lo que cargues se guarda en la nube y aparece en los demás dispositivos donde entres con este usuario.` : 'No hay sesión iniciada.'}</p>
