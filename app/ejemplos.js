@@ -141,9 +141,9 @@ function autoDiNardi() {
 const preguntarDiNardi = () => confirmBox(`Se pone el nombre <b>di Nardi</b>, la moneda en <b>€</b> y los 3 locales de la web: ${DINARDI.map((d) => `<b>${esc(d.nombre)}</b> (${esc(d.dir)})`).join(', ')}.<br><br>Los locales que ya existen cambian de nombre en orden y conservan sus turnos, stock y plata. No se borra nada.`, aplicarDiNardi, 'Usar datos de di Nardi');
 
 function bannerEjemplos() {
-  if (hayEjemplos()) return `<div class="card banner-ej"><div><b>📚 Estás viendo datos de ejemplo.</b> Son los que dicen <i>(ejemplo)</i> en Productos, Movimientos, Turnos, Catering, Cierre de caja y Calendario. Se pueden abrir, editar o borrar como cualquier otro.</div><button class="sm" data-act="ejBorrar">🧹 Borrar todos los ejemplos</button></div>`;
+  if (hayEjemplos()) return `<div class="card banner-ej"><div><b>📚 Estás viendo datos de ejemplo.</b> Son los que dicen <i>(ejemplo)</i> en Productos, Movimientos, Turnos, Catering, Cierre de caja y Calendario. Se pueden abrir, editar o borrar como cualquier otro.</div><div class="row"><button class="sm" data-act="ejRenovar">🔄 Volver a cargarlos completos</button><button class="sm" data-act="ejBorrar">🧹 Borrar todos los ejemplos</button></div></div>`;
   const dn = esDiNardi() ? '' : `<div class="card banner-ej"><div><b>☕ ¿Es para di Nardi?</b> Con un toque se pone el nombre, el euro y los 3 locales (di Work, Marítima y Venegas).</div><button class="pri sm" data-act="dnUsar">Usar datos de di Nardi</button></div>`;
-  if (state.config.ejemplosVisto) return dn;
+  if (state.config.ejemplosVisto) return dn + `<div class="card banner-ej ej-mini"><div>📚 <b>Datos de ejemplo:</b> no están cargados. Se pueden poner y sacar las veces que quieras.</div><button class="sm" data-act="ejCargar">📚 Cargar ejemplos</button></div>`;
   return dn + `<div class="card banner-ej"><div><b>👋 ¿Primera vez?</b> Cargá unos datos de ejemplo para ver cómo funciona cada sección. No tocan lo que ya está cargado y después se borran todos juntos con un botón.</div><div class="row"><button class="pri sm" data-act="ejCargar">📚 Cargar ejemplos</button><button class="sm" data-act="ejNo">No, gracias</button></div></div>`;
 }
 function ajustesEjemplos() {
