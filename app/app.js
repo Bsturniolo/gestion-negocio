@@ -251,13 +251,19 @@ function render() {
   if (needLogin()) { $('#main').innerHTML = vLogin(); const pw = $('#lgPass'); if (pw) pw.onkeydown = (e) => { if (e.key === 'Enter') ACTS.lgGo(); }; return; }
   const fn = { inicio: vInicio, productos: vProductos, proveedores: vProveedores, finanzas: vFinanzas, balance: vBalance, calendario: vCalendario, turnos: vTurnos, catering: vCatering, ajustes: vAjustes, mas: vMas }[view];
   // al redibujar, la pantalla y las planillas con desplazamiento quedan donde estaban
-  const scrolls = $$('#main .xls-wrap, #main .tablewrap, #main .tg-wrap').map((el) => [el.scrollLeft, el.scrollTop]);
+  const scrolls = $$('#main .xls-wrap, #main .tablewrap, #main .tg-wrap, #main .locales, #main .tabs').map((el) => [el.scrollLeft, el.scrollTop]);
   const winX = window.scrollX, winY = window.scrollY, mismaVista = render._ultima === view;
   $('#main').innerHTML = fn();
   if (mismaVista) {
-    $$('#main .xls-wrap, #main .tablewrap, #main .tg-wrap').forEach((el, i) => { if (scrolls[i]) { el.scrollLeft = scrolls[i][0]; el.scrollTop = scrolls[i][1]; } });
+    $$('#main .xls-wrap, #main .tablewrap, #main .tg-wrap, #main .locales, #main .tabs').forEach((el, i) => { if (scrolls[i]) { el.scrollLeft = scrolls[i][0]; el.scrollTop = scrolls[i][1]; } });
     window.scrollTo(winX, winY);
   }
+  // en las filas que se deslizan de costado, lo elegido queda siempre a la vista
+  $$('#main .locales, #main .tabs').forEach((row) => {
+    const sel = $('.sel, .on', row); if (!sel || row.scrollWidth <= row.clientWidth) return;
+    const a = sel.offsetLeft - row.offsetLeft, b = a + sel.offsetWidth;
+    if (a < row.scrollLeft + 12) row.scrollLeft = Math.max(0, a - 24); else if (b > row.scrollLeft + row.clientWidth - 12) row.scrollLeft = b - row.clientWidth + 24;
+  });
   render._ultima = view;
   bindView();
 }

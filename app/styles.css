@@ -427,3 +427,6 @@ input[type=checkbox],input[type=radio]{accent-color:var(--pri)}
 .cat-aviso-l button{background:#fff;border-color:#e3c3a3;text-align:left}
 @media (max-width:760px){ .cat-aviso-l{flex-direction:column} .cat-aviso-l button{width:100%;min-height:44px} }
 .banner-ej.ej-mini{border:1px dashed #cdb8a6;padding:10px 14px;font-size:14px}
+.loc{transition:font-size .15s,padding .15s}
+.loc.sel{font-size:16.5px;padding:9px 18px;box-shadow:0 3px 10px #4d2d1833}
+@media (max-width:760px){ .loc.sel{min-height:46px;font-size:17px} }
