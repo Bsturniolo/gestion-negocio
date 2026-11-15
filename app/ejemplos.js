@@ -96,9 +96,9 @@ function borrarEjemplos() {
 
 // ================= Datos del local real (pasteleriadinardi.com) =================
 const DINARDI = [
-  { nombre: 'di Nardi >< di Work', color: '#7a4a2e', dir: 'León y Castillo 8', tel: '+34 928 98 56 70' },
-  { nombre: 'di Nardi Marítima', color: '#1e88e5', dir: 'Av. José Ramírez Bethancourt 18', tel: '+34 928 24 14 21' },
-  { nombre: 'di Nardi Venegas', color: '#2e7d32', dir: 'Venegas 12', tel: '+34 928 43 54 73' },
+  { nombre: 'di Nardi >< di Work', color: '#4d2d18', dir: 'León y Castillo 8', tel: '+34 928 98 56 70' },
+  { nombre: 'di Nardi Marítima', color: '#b87332', dir: 'Av. José Ramírez Bethancourt 18', tel: '+34 928 24 14 21' },
+  { nombre: 'di Nardi Venegas', color: '#506345', dir: 'Venegas 12', tel: '+34 928 43 54 73' },
 ];
 const esDiNardi = () => /nardi/i.test(state.config.negocio || '');
 // Los locales que ya existen se renombran en orden (1º, 2º, 3º) y conservan su id, así sus turnos,
@@ -114,7 +114,14 @@ function aplicarDiNardi(silencio) {
   state.config.locales = lista;
   commit(); toast(silencio ? 'Los locales ahora tienen los nombres de di Nardi ✔' : 'Listo: di Nardi con sus 3 locales ✔');
 }
-function autoDiNardi() { if (!state.config.dnAuto) aplicarDiNardi(true); } // una sola vez por cuenta
+function autoDiNardi() {
+  if (!state.config.dnAuto) return aplicarDiNardi(true); // una sola vez por cuenta
+  if (!state.config.dnColores) { // 1.8.3: colores de la web para los locales que tenían los de la 1.8.2
+    const viejos = { '#7a4a2e': '#4d2d18', '#1e88e5': '#b87332', '#2e7d32': '#506345' };
+    state.config.locales = locales().map((l) => (/nardi/i.test(l.nombre) && viejos[l.color] ? { ...l, color: viejos[l.color] } : l));
+    state.config.dnColores = true; commit();
+  }
+}
 const preguntarDiNardi = () => confirmBox(`Se pone el nombre <b>di Nardi</b>, la moneda en <b>€</b> y los 3 locales de la web: ${DINARDI.map((d) => `<b>${esc(d.nombre)}</b> (${esc(d.dir)})`).join(', ')}.<br><br>Los locales que ya existen cambian de nombre en orden y conservan sus turnos, stock y plata. No se borra nada.`, aplicarDiNardi, 'Usar datos de di Nardi');
 
 function bannerEjemplos() {

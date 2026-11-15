@@ -192,7 +192,7 @@ function syncBadge() {
 }
 const needLogin = () => cloud.cfg && !cloud.uid;
 function vLogin() {
-  return `<div class="login-box card"><div class="row"><img src="icono-192.png" alt=""><div><h1>${esc(state.config.negocio || 'Gestión del Negocio')}</h1><p class="sub" style="margin:0">Iniciá sesión para ver tus datos en la PC y en el celular.</p></div></div>
+  return `<div class="login-box card"><div class="row"><img src="dinardi-192.png" alt=""><div><h1>${esc(state.config.negocio || 'Gestión del Negocio')}</h1><p class="sub" style="margin:0">Iniciá sesión para ver tus datos en la PC y en el celular.</p></div></div>
   <div class="form mt" style="grid-template-columns:1fr"><label class="f">Email<input id="lgMail" type="email" autocomplete="username" value="${esc(localStorage.getItem('lastEmail') || '')}"></label>
   <label class="f">Contraseña<input id="lgPass" type="password" autocomplete="current-password"></label></div>
   <p class="small c-out" id="lgErr"></p>
@@ -243,6 +243,7 @@ function vMas() {
 
 function render() {
   $('#brandName').textContent = state.config.negocio || 'Mi Negocio';
+  { const dn = /nardi/i.test(state.config.negocio || ''); $('#brandLogo').classList.toggle('hidden', !dn); $('#brandIco').classList.toggle('hidden', dn); $('#brandName').classList.toggle('hidden', dn); document.body.classList.toggle('dinardi', dn); }
   const ver = $('#ver'); if (ver) ver.textContent = 'versión ' + (window.APP_VERSION || '');
   document.title = (state.config.negocio || 'Mi Negocio') + ' — Gestión';
   document.body.classList.toggle('login', !!needLogin());
@@ -293,7 +294,8 @@ function vInicio() {
   const { vencidos, proximos } = avisos(), bajo = stockBajo();
   const recup = total.inversion > 0 ? (total.ganancia / total.inversion) * 100 : 0;
   return `
-  <h1>Hola${state.config.saludo ? ' ' + esc(state.config.saludo) : ''} 👋</h1><p class="sub">${new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+  ${/nardi/i.test(state.config.negocio || '') ? '<img class="logo-m solo-m" src="logo-dinardi.svg" alt="di Nardi">' : ''}
+  <h1>Hola${state.config.saludo ? ` <span class="acento">${esc(state.config.saludo)}</span>` : ''} 👋</h1><p class="sub">${new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
   ${typeof bannerEjemplos === 'function' ? bannerEjemplos() : ''}
   ${selLocal()}
   <div class="row acciones" style="margin-bottom:16px">
@@ -860,7 +862,7 @@ const ACTS = {
 // ---------- Avisos al abrir ----------
 function notificar() {
   const { vencidos, proximos } = avisos(); const n = vencidos.length + proximos.length; if (!n || !('Notification' in window)) return;
-  const send = () => { try { new Notification(state.config.negocio || 'Gestión del Negocio', { body: `${vencidos.length ? vencidos.length + ' vencido(s). ' : ''}${proximos.length ? proximos.length + ' por vencer pronto.' : ''} Abrí el calendario para ver el detalle.`, icon: 'icono-192.png' }); } catch {} };
+  const send = () => { try { new Notification(state.config.negocio || 'Gestión del Negocio', { body: `${vencidos.length ? vencidos.length + ' vencido(s). ' : ''}${proximos.length ? proximos.length + ' por vencer pronto.' : ''} Abrí el calendario para ver el detalle.`, icon: 'dinardi-192.png' }); } catch {} };
   if (Notification.permission === 'granted') send(); else if (Notification.permission !== 'denied') Notification.requestPermission().then((p) => p === 'granted' && send());
 }
 
