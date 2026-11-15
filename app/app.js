@@ -57,7 +57,7 @@ const TIPOS_EV = {
 const EMPTY = () => ({
   version: 1,
   config: { negocio: 'Mi Negocio', moneda: '$', avisoDias: 3, ultimoRespaldo: null, turnos: { inicio: 6, fin: 22, intervalo: 60 } },
-  productos: [], proveedores: [], movimientos: [], stockMovs: [], eventos: [], personal: [], turnos: [], caterings: [],
+  productos: [], proveedores: [], movimientos: [], stockMovs: [], eventos: [], personal: [], turnos: [], caterings: [], cierres: [],
 });
 let state = EMPTY();
 
@@ -96,7 +96,7 @@ const prod = (id) => state.productos.find((p) => p.id === id);
 
 // ---------- Nube (Firebase) ----------
 const cloud = { cfg: null, uid: null, email: '', live: false, synced: {}, buffer: {}, reported: new Set(), unsub: null, pending: false, error: '', deferred: {} };
-const COLS = ['productos', 'proveedores', 'movimientos', 'stockMovs', 'eventos', 'personal', 'turnos', 'caterings'];
+const COLS = ['productos', 'proveedores', 'movimientos', 'stockMovs', 'eventos', 'personal', 'turnos', 'caterings', 'cierres'];
 function stable(v) { // JSON con claves ordenadas, para comparar registros
   if (Array.isArray(v)) return '[' + v.map(stable).join(',') + ']';
   if (v && typeof v === 'object') return '{' + Object.keys(v).filter((k) => v[k] !== undefined).sort().map((k) => JSON.stringify(k) + ':' + stable(v[k])).join(',') + '}';
@@ -216,8 +216,8 @@ const prods = () => state.productos.filter(enAlcance);
 const movs = () => state.movimientos.filter(enAlcance);
 const localSelect = (sel) => (typeof multiLocal === 'function' && multiLocal() ? `<label class="f">Local<select name="local">${locales().map((l) => `<option value="${l.id}" ${l.id === (sel || localActivo()) ? 'selected' : ''}>${esc(l.nombre)}</option>`).join('')}</select></label>` : '');
 const selLocal = () => (typeof selectorLocal === 'function' ? selectorLocal() : '');
-const valorStock = () => prods().reduce((s, p) => s + Math.max(0, p.stock) * (p.costo || 0), 0);
-const stockBajo = () => prods().filter((p) => p.stockMin > 0 && p.stock <= p.stockMin);
+const valorStock = () => prods().filter((p) => !esElaborado(p)).reduce((s, p) => s + Math.max(0, p.stock) * (p.costo || 0), 0);
+const stockBajo = () => prods().filter((p) => !esElaborado(p) && p.stockMin > 0 && p.stock <= p.stockMin);
 function avisos() {
   const hoy = todayStr(), lim = state.config.avisoDias || 3;
   const pend = state.eventos.filter((e) => !e.hecho);
@@ -292,6 +292,7 @@ function vInicio() {
   const recup = total.inversion > 0 ? (total.ganancia / total.inversion) * 100 : 0;
   return `
   <h1>Hola 👋</h1><p class="sub">${new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+  ${typeof bannerEjemplos === 'function' ? bannerEjemplos() : ''}
   ${selLocal()}
   <div class="row acciones" style="margin-bottom:16px">
     <button class="pri" data-act="venta">🛒 Registrar venta</button>
@@ -326,6 +327,7 @@ const byFechaDesc = (a, b) => (b.fecha + (b.creado || '')).localeCompare(a.fecha
 
 // Productos
 function vProductos() {
+  if (ui.prodTab === 'costos' && typeof vCostos === 'function') return vCostos();
   const cats = [...new Set(prods().map((p) => p.categoria).filter(Boolean))].sort();
   const q = ui.prodQ.toLowerCase();
   const list = prods().filter((p) => (!ui.prodCat || p.categoria === ui.prodCat) && (!q || [p.nombre, p.categoria, p.codigo, (prov(p.proveedorId) || {}).nombre].join(' ').toLowerCase().includes(q))).sort((a, b) => a.nombre.localeCompare(b.nombre));
@@ -333,13 +335,14 @@ function vProductos() {
   <div class="spread"><div><h1>Productos y stock</h1><p class="sub">${prods().length} productos · valor del stock: <b>${fmtMoney(valorStock())}</b></p></div>
   <div class="row"><button data-act="compra">📥 Entrada de stock</button><button data-act="venta">🛒 Venta</button><button class="pri" data-act="prodNew">➕ Nuevo producto</button></div></div>
   ${selLocal()}
+  ${typeof tabsProductos === 'function' ? tabsProductos() : ''}
   <div class="row" style="margin-bottom:14px"><input type="search" class="search" placeholder="Buscar producto, código o proveedor…" data-bind="prodQ" value="${esc(ui.prodQ)}">
   <select data-bind="prodCat" style="width:auto"><option value="">Todas las categorías</option>${cats.map((c) => `<option ${c === ui.prodCat ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
   ${list.length ? `<div class="grid prods">${list.map((p) => {
     const bajo = p.stockMin > 0 && p.stock <= p.stockMin;
     return `<div class="card prod" data-act="prodView" data-id="${p.id}"><div class="ph" style="${p.foto ? `background-image:url('${p.foto}')` : ''}">${p.foto ? '' : '📦'}</div>
     <div class="bd"><div class="nm">${esc(p.nombre)}</div><div class="meta">${typeof verTodos === 'function' && verTodos() ? `<span class="sw" style="background:${localInfo(localDe(p)).color}"></span>${esc(localInfo(localDe(p)).nombre)} · ` : ''}${esc(p.categoria || 'Sin categoría')}${p.proveedorId && prov(p.proveedorId) ? ' · ' + esc(prov(p.proveedorId).nombre) : ''}</div>
-    <div class="spread"><span>${fmtMoney(p.precio)}</span><span class="badge ${p.stock <= 0 ? 'out' : bajo ? 'warn' : 'in'}">Stock: ${fmtNum(p.stock)} ${esc(p.unidad || '')}</span></div></div></div>`;
+    <div class="spread"><span>${fmtMoney(p.precio)}</span>${esElaborado(p) ? `<span class="badge inv">Elaborado · gana ${fmtMoney(p.precio - costoDe(p))}</span>` : `<span class="badge ${p.stock <= 0 ? 'out' : bajo ? 'warn' : 'in'}">Stock: ${fmtNum(p.stock)} ${esc(p.unidad || '')}</span>`}</div></div></div>`;
   }).join('')}</div>` : `<div class="card empty">${prods().length ? 'No hay productos que coincidan con la búsqueda.' : 'Todavía no cargaste productos. Tocá <b>➕ Nuevo producto</b> para empezar.'}</div>`}`;
 }
 
@@ -367,6 +370,7 @@ function movTable(list, compact) {
   }).join('')}</tbody></table></div>`;
 }
 function vFinanzas() {
+  if (ui.finTab === 'caja' && typeof vCaja === 'function') return vCaja();
   const q = ui.movQ.toLowerCase();
   const list = movs().filter((m) => (!ui.movMes || m.fecha.startsWith(ui.movMes)) && (!ui.movTipo || m.tipo === ui.movTipo) && (!q || [m.categoria, m.descripcion, (prov(m.proveedorId) || {}).nombre, (prod(m.productoId) || {}).nombre].join(' ').toLowerCase().includes(q))).sort(byFechaDesc);
   const r = { ingreso: 0, gasto: 0, inversion: 0 }; list.forEach((m) => (r[m.tipo] += m.monto));
@@ -374,6 +378,7 @@ function vFinanzas() {
   <div class="spread"><div><h1>Movimientos de dinero</h1><p class="sub">Todo lo que entra y sale: cobros, gastos e inversiones.</p></div>
   <div class="row"><button data-act="movNew" data-id="ingreso">➕ Cobro</button><button data-act="movNew" data-id="gasto">➖ Gasto</button><button data-act="movNew" data-id="inversion">📈 Inversión</button></div></div>
   ${selLocal()}
+  ${typeof tabsFinanzas === 'function' ? tabsFinanzas() : ''}
   <div class="row" style="margin-bottom:14px">
     <input type="month" data-bind="movMes" value="${esc(ui.movMes)}" style="width:auto"> <button class="sm" data-act="movAll">Ver todo</button>
     <select data-bind="movTipo" style="width:auto"><option value="">Todos los tipos</option>${Object.entries(TIPOS_MOV).map(([k, t]) => `<option value="${k}" ${k === ui.movTipo ? 'selected' : ''}>${t.lbl}</option>`).join('')}</select>
@@ -478,6 +483,7 @@ function vAjustes() {
     <label class="f">Avisar deudas con cuántos días de anticipación<input id="cfgDias" type="number" min="0" value="${c.avisoDias}"></label>
   </div><div class="modal-actions"><button class="pri" data-act="cfgSave">Guardar</button></div></div>
   ${typeof locales === 'function' ? `<h2>Locales</h2><div class="card"><div class="row" style="flex-wrap:wrap;gap:8px">${locales().map((l) => `<button data-act="locEdit" data-id="${l.id}"><span class="sw" style="background:${l.color}"></span> ${esc(l.nombre)} ✏️</button>`).join('')}<button data-act="locNew">+ Agregar local</button></div><p class="small muted" style="margin-bottom:0">Tocá un local para cambiarle el nombre o el color.</p></div>` : ''}
+  ${typeof ajustesEjemplos === 'function' ? ajustesEjemplos() : ''}
   <h2>Nube (sincronizar PC y celular)</h2>
   <div class="card">${cloud.cfg ? `
     <p style="margin-top:0">${cloud.uid ? `Sesión iniciada como <b>${esc(cloud.email)}</b>. Todo lo que cargues se guarda en la nube y aparece en los demás dispositivos donde entres con este usuario.` : 'No hay sesión iniciada.'}</p>
@@ -552,16 +558,19 @@ function prodForm(p) {
     <div class="full"><div class="spread small" style="margin-bottom:4px"><b>Otros datos (los que quieras)</b><button class="sm" id="addCampo">+ Agregar dato</button></div><div id="campos">${(p.campos || []).map(campoRow).join('')}</div><div class="small muted">Ej: Talle → M · Color → Rojo · Vencimiento → 12/2026</div></div>
     <label class="f full">Notas<textarea name="notas">${esc(p.notas)}</textarea></label>
   </div>
+  ${recetaSeccion(p)}
   <div class="modal-actions">${isNew ? '' : '<button class="danger" id="pDel">Eliminar</button>'}<button data-act="close">Cancelar</button><button class="pri" id="pSave">Guardar</button></div>`, (box) => {
     $('#pFoto', box).onchange = async (e) => { const f = e.target.files[0]; if (!f) return; try { foto = await resizeImage(f); const pv = $('#pPrev', box); pv.style.backgroundImage = `url('${foto}')`; pv.textContent = ''; } catch (err) { toast(err.message); } };
     const del = $('#pFotoDel', box); if (del) del.onclick = () => { foto = ''; const pv = $('#pPrev', box); pv.style.backgroundImage = ''; pv.textContent = '📷'; del.remove(); };
     $('#addCampo', box).onclick = () => $('#campos', box).insertAdjacentHTML('beforeend', campoRow({ k: '', v: '' }));
+    recetaBind(box, p);
     $('#campos', box).onclick = (e) => { if (e.target.dataset.rm) e.target.closest('.extra').remove(); };
     if (!isNew) $('#pDel', box).onclick = () => confirmBox(`Se va a eliminar <b>${esc(p.nombre)}</b>. Los movimientos de dinero ya cargados se mantienen.`, () => { state.productos = state.productos.filter((x) => x.id !== p.id); commit(); toast('Producto eliminado'); }, 'Eliminar');
     $('#pSave', box).onclick = () => {
       const v = vals(box); if (!v.nombre) return toast('Poné un nombre al producto');
       const campos = $$('.extra', box).map((r) => ({ k: $('.ck', r).value.trim(), v: $('.cv', r).value.trim() })).filter((c) => c.k || c.v);
-      const data = { nombre: v.nombre, categoria: v.categoria, codigo: v.codigo, unidad: v.unidad, costo: numIn(v.costo), precio: numIn(v.precio), stockMin: numIn(v.stockMin), proveedorId: v.proveedorId, notas: v.notas, campos, foto };
+      const receta = recetaLeer(box);
+      const data = { nombre: v.nombre, categoria: v.categoria, codigo: v.codigo, unidad: v.unidad, costo: receta ? costoReceta(receta) : numIn(v.costo), precio: numIn(v.precio), stockMin: numIn(v.stockMin), proveedorId: v.proveedorId, notas: v.notas, campos, foto, receta: receta || null };
       if (isNew) {
         const np = { id: uid(), creado: new Date().toISOString(), stock: numIn(v.stock), local: v.local || localActivo(), ...data }; state.productos.push(np);
         if (np.stock) state.stockMovs.push({ id: uid(), fecha: todayStr(), productoId: np.id, tipo: 'ajuste', cantidad: np.stock, nota: 'Stock inicial' });
@@ -577,10 +586,11 @@ function prodView(id) {
   const movs = state.stockMovs.filter((m) => m.productoId === id).sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 15);
   const vendidos = state.movimientos.filter((m) => m.productoId === id && m.tipo === 'ingreso');
   const uVend = vendidos.reduce((s, m) => s + (m.cantidad || 0), 0), $vend = vendidos.reduce((s, m) => s + m.monto, 0);
-  const margen = p.costo > 0 ? ((p.precio - p.costo) / p.costo) * 100 : 0;
+  const costo = costoDe(p), margen = p.precio > 0 ? ((p.precio - costo) / p.precio) * 100 : 0;
   openModal(`<div class="spread"><h3 style="margin:0">${esc(p.nombre)}</h3><button class="sm" data-act="close">✕</button></div>
   ${p.foto ? `<img src="${p.foto}" alt="" style="width:100%;max-height:300px;object-fit:contain;border-radius:10px;background:#f4f6f5;margin-top:12px">` : ''}
-  <div class="grid kpis mt">${kpi('Stock', `${fmtNum(p.stock)} <span class="small muted">${esc(p.unidad || '')}</span>`, p.stockMin && p.stock <= p.stockMin ? 'c-warn' : '')}${kpi('Precio venta', fmtMoney(p.precio))}${kpi('Costo', fmtMoney(p.costo), '', p.costo ? `Margen ${fmtNum(margen)}%` : '')}${kpi('Vendido', fmtNum(uVend), '', fmtMoney($vend))}</div>
+  <div class="grid kpis mt">${kpi('Stock', `${fmtNum(p.stock)} <span class="small muted">${esc(p.unidad || '')}</span>`, p.stockMin && p.stock <= p.stockMin ? 'c-warn' : '')}${kpi('Precio venta', fmtMoney(p.precio))}${kpi(esElaborado(p) ? 'Costo por porción' : 'Costo', fmtMoney(costo), '', costo ? `Ganancia ${fmtMoney(p.precio - costo)} (${fmtNum(Math.round(margen))}% del precio)` : '')}${kpi('Vendido', fmtNum(uVend), '', fmtMoney($vend))}</div>
+  ${esElaborado(p) ? recetaDetalle(p) : ''}
   <table class="mt small"><tbody>
     <tr><td class="muted">Categoría</td><td>${esc(p.categoria || '—')}</td></tr>
     ${p.codigo ? `<tr><td class="muted">Código</td><td>${esc(p.codigo)}</td></tr>` : ''}
@@ -619,13 +629,13 @@ function ventaForm(prodId) {
     $('#vOk', box).onclick = () => {
       const v = vals(box), p = prod(v.productoId), cant = numIn(v.cantidad), total = numIn(v.total);
       if (!p) return toast('Elegí un producto'); if (cant <= 0) return toast('La cantidad tiene que ser mayor a 0');
-      p.stock -= cant;
-      state.stockMovs.push({ id: uid(), fecha: v.fecha, productoId: p.id, tipo: 'salida', cantidad: -cant, nota: v.descripcion || 'Venta' });
+      if (esElaborado(p)) descontarReceta(p, cant, v.fecha, v.descripcion || 'Venta de ' + p.nombre);
+      else { p.stock -= cant; state.stockMovs.push({ id: uid(), fecha: v.fecha, productoId: p.id, tipo: 'salida', cantidad: -cant, nota: v.descripcion || 'Venta' }); }
       if (v.fiado) {
-        state.eventos.push({ id: uid(), tipo: 'cobrar', titulo: `Venta fiada: ${cant} × ${p.nombre}`, persona: v.descripcion, monto: total, fecha: v.fechaCobro || todayStr(), notas: '', hecho: false, venta: { productoId: p.id, cantidad: cant, costoUnit: p.costo || 0, fechaVenta: v.fecha } });
+        state.eventos.push({ id: uid(), tipo: 'cobrar', titulo: `Venta fiada: ${cant} × ${p.nombre}`, persona: v.descripcion, monto: total, fecha: v.fechaCobro || todayStr(), notas: '', hecho: false, venta: { productoId: p.id, cantidad: cant, costoUnit: costoDe(p), fechaVenta: v.fecha } });
         closeModal(); commit(); toast('Venta fiada registrada. Cuando te pague, marcala como resuelta en el calendario.');
       } else {
-        state.movimientos.push({ id: uid(), creado: new Date().toISOString(), fecha: v.fecha, tipo: 'ingreso', categoria: 'Venta', descripcion: v.descripcion, monto: total, productoId: p.id, cantidad: cant, costoUnit: p.costo || 0, local: localDe(p) });
+        state.movimientos.push({ id: uid(), creado: new Date().toISOString(), fecha: v.fecha, tipo: 'ingreso', categoria: 'Venta', descripcion: v.descripcion, monto: total, productoId: p.id, cantidad: cant, costoUnit: costoDe(p), local: localDe(p) });
         closeModal(); commit(); toast('Venta registrada ✔');
       }
     };

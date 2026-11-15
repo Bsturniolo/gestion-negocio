@@ -12,7 +12,7 @@ pkg.write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\n')
 (root / 'app' / 'version.js').write_text(f"window.APP_VERSION = '{v}';\n")
 idx = root / 'app' / 'index.html'
 s = idx.read_text()
-s = re.sub(r'(src|href)="(styles\.css|config\.js|cloud\.js|app\.js|turnos\.js|catering\.js|version\.js)(\?v=[^"]*)?"', lambda m: f'{m.group(1)}="{m.group(2)}?v={v}"', s)
+s = re.sub(r'(src|href)="(styles\.css|config\.js|cloud\.js|app\.js|turnos\.js|catering\.js|extras\.js|ejemplos\.js|version\.js)(\?v=[^"]*)?"', lambda m: f'{m.group(1)}="{m.group(2)}?v={v}"', s)
 idx.write_text(s)
 sw = root / 'app' / 'sw.js'
 sw.write_text(re.sub(r"const CACHE = '[^']*';", f"const CACHE = 'negocio-{v}';", sw.read_text()))

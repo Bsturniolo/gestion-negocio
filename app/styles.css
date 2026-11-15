@@ -327,3 +327,23 @@ tr.clic{cursor:pointer}tr.clic:hover td{background:#f6faf8}
 
 .loc-edit{display:grid;grid-template-columns:22px 1fr auto;gap:8px;align-items:center;margin-bottom:8px}
 .loc-lapiz{font-size:12px;margin-left:2px}
+
+/* Receta, menús, cierre de caja, ejemplos */
+.rec-box{margin-top:16px;padding:14px;border:1px solid var(--line);border-radius:12px;background:#fafcfb}
+.rec-fila{display:grid;grid-template-columns:1fr 110px 80px 40px;gap:8px;align-items:center;margin-bottom:8px}
+.rec-fila .rs{text-align:right;font-size:13px;color:var(--muted)}
+.rec-res{margin-top:10px;font-size:14px}
+.menus-grid{grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.menu-card{cursor:pointer}
+.menu-card:hover{border-color:var(--pri)}
+.cat-fila.mn{grid-template-columns:1fr 1fr 90px 90px 40px}
+.caja-res{margin-top:14px;padding:12px 14px;border-radius:12px;background:var(--pri2)}
+.banner-ej{display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:#eef5ff;border-color:#c9dcf5;margin-bottom:18px}
+.banner-ej>div:first-child{flex:1 1 280px}
+.ayuda-card{background:#f6faf8;margin-bottom:14px;font-size:14px}
+@media (max-width:760px){
+  .rec-fila{grid-template-columns:1fr 1fr 44px}.rec-fila .ri{grid-column:1/-1}.rec-fila .rs{display:none}
+  .cat-fila.mn{grid-template-columns:1fr 1fr 44px}.cat-fila.mn .mp{grid-column:1/-1}.cat-fila.mn .md{grid-column:1/-1}
+  .banner-ej .row{width:100%}.banner-ej .row button{flex:1}
+  .menus-grid{grid-template-columns:1fr}
+}

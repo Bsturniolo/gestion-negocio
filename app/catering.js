@@ -29,8 +29,8 @@ function vCatering() {
   const delMes = all.filter((c) => c.fecha.startsWith(mes)), cuentan = delMes.filter(catCuenta);
   const sum = (arr, fn) => arr.reduce((s, c) => s + fn(c), 0);
   const porCobrar = all.filter((c) => catCuenta(c) && catSaldo(c) > 0), sinFactura = all.filter((c) => catCuenta(c) && !catFacturado(c));
-  const filtros = [['proximos', 'Próximos'], ['mes', 'Por mes'], ['cobrar', `Por cobrar (${porCobrar.length})`], ['factura', `Sin factura (${sinFactura.length})`], ['todos', 'Todos']];
-  const list = { proximos: () => all.filter((c) => c.fecha >= hoy && c.estado !== 'cancelado'), mes: () => delMes, cobrar: () => porCobrar, factura: () => sinFactura, todos: () => all.slice().reverse() }[ui.catFiltro]();
+  const filtros = [['proximos', 'Próximos'], ['mes', 'Por mes'], ['cobrar', `Por cobrar (${porCobrar.length})`], ['factura', `Sin factura (${sinFactura.length})`], ['todos', 'Todos'], ['menus', '📋 Menús armados']];
+  const list = { proximos: () => all.filter((c) => c.fecha >= hoy && c.estado !== 'cancelado'), mes: () => delMes, cobrar: () => porCobrar, factura: () => sinFactura, todos: () => all.slice().reverse(), menus: () => [] }[ui.catFiltro || 'proximos']();
   const ganancia = sum(cuentan, catTotal) - sum(cuentan, catGastos);
   return `<div class="spread"><div><h1>Catering</h1><p class="sub">Eventos, presupuestos, facturas y cobros. Se lleva aparte de los locales.</p></div>
   <div class="row"><button class="pri" data-act="catNew">➕ Nuevo catering</button></div></div>
@@ -43,7 +43,7 @@ function vCatering() {
   </div>
   <p class="small muted" style="margin:0 0 14px">Falta cobrar en total: <b class="c-out">${fmtMoney(sum(porCobrar, catSaldo))}</b> · Presupuestos esperando respuesta: <b>${all.filter((c) => c.estado === 'presupuesto' && c.fecha >= hoy).length}</b> · Horas del personal en ${MESES[M - 1].toLowerCase()}: <b>${fmtH(sum(cuentan, catHoras))}</b></p>
   <div class="tabs">${filtros.map(([k, l]) => `<button class="${ui.catFiltro === k ? 'on' : ''}" data-act="catFiltro" data-id="${k}">${l}</button>`).join('')}</div>
-  ${list.length ? `<div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Cliente / evento</th><th class="num hide-m">Personas</th><th class="hide-m">Estado</th><th class="num">Total</th><th class="num">Falta cobrar</th><th class="hide-m">Factura</th><th class="hide-m"></th></tr></thead><tbody>
+  ${ui.catFiltro === 'menus' && typeof vMenus === 'function' ? vMenus() : list.length ? `<div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Cliente / evento</th><th class="num hide-m">Personas</th><th class="hide-m">Estado</th><th class="num">Total</th><th class="num">Falta cobrar</th><th class="hide-m">Factura</th><th class="hide-m"></th></tr></thead><tbody>
   ${list.map((c) => { const saldo = catSaldo(c); return `<tr class="clic" data-act="catEdit" data-id="${c.id}"><td>${fmtDate(c.fecha)}${c.hora ? `<div class="small muted">${esc(c.hora)}</div>` : ''}</td><td><b>${esc(c.cliente || 'Sin nombre')}</b>${c.tipo || c.lugar ? `<div class="small muted">${esc([c.tipo, c.lugar].filter(Boolean).join(' · '))}</div>` : ''}<div class="solo-m">${catBadge(c)}</div></td><td class="num hide-m">${c.personas || '–'}</td><td class="hide-m">${catBadge(c)}</td><td class="num"><b>${fmtMoney(catTotal(c))}</b></td><td class="num">${!catCuenta(c) ? '–' : saldo > 0 ? `<b class="c-out">${fmtMoney(saldo)}</b>` : '<span class="badge in">Cobrado</span>'}</td><td class="hide-m">${catFacturado(c) ? `<span class="badge in">N° ${esc(c.factura.numero)}</span>` : catCuenta(c) ? '<span class="badge warn">Sin factura</span>' : '–'}</td><td class="right hide-m"><button class="sm">Abrir</button></td></tr>`; }).join('')}
   </tbody></table></div>` : `<div class="card empty">${catList().length ? 'No hay caterings en esta lista.' : 'Todavía no hay caterings. Tocá <b>➕ Nuevo catering</b> para cargar el primero.'}</div>`}`;
 }
@@ -58,7 +58,7 @@ function cateringProximos() {
 
 // ---------- Formulario ----------
 const horasOpt = (sel) => { let h = ''; for (let m = 0; m <= 24 * 60; m += 30) h += `<option value="${m}" ${m === sel ? 'selected' : ''}>${hhmm(m)}</option>`; return h; };
-const filaItem = (i = {}) => `<div class="cat-fila it"><input class="d" placeholder="Ej: Medialunas de manteca" value="${esc(i.d || '')}"><input class="c" inputmode="decimal" placeholder="Cant." value="${i.c ?? ''}"><input class="p" inputmode="decimal" placeholder="Precio c/u" value="${i.p ?? ''}"><span class="st num"></span><button type="button" class="sm" data-rm="1" title="Quitar">✕</button></div>`;
+const filaItem = (i = {}) => `<div class="cat-fila it"${i.menuId ? ` data-menu="${esc(i.menuId)}"` : ''}><input class="d" placeholder="Ej: Medialunas de manteca" value="${esc(i.d || '')}"><input class="c" inputmode="decimal" placeholder="Cant." value="${i.c ?? ''}"><input class="p" inputmode="decimal" placeholder="Precio c/u" value="${i.p ?? ''}"><span class="st num"></span><button type="button" class="sm" data-rm="1" title="Quitar">✕</button></div>`;
 const filaEquipo = (e = {}) => `<div class="cat-fila eq"><select class="pid">${activos().concat(e.pid && persona(e.pid) && persona(e.pid).activo === false ? [persona(e.pid)] : []).map((p) => `<option value="${p.id}" ${p.id === e.pid ? 'selected' : ''}>${esc(p.nombre)}</option>`).join('')}</select><select class="a">${horasOpt(e.desde ?? 9 * 60)}</select><select class="b">${horasOpt(e.hasta ?? 14 * 60)}</select><span class="st num"></span><button type="button" class="sm" data-rm="1" title="Quitar">✕</button></div>`;
 const filaGasto = (g = {}) => `<div class="cat-fila ga"><input class="d" placeholder="Ej: Alquiler de vajilla, transporte" value="${esc(g.concepto || '')}"><input class="m" inputmode="decimal" placeholder="Monto" value="${g.monto ?? ''}"><input class="f" type="date" value="${g.fecha || todayStr()}"><button type="button" class="sm" data-rm="1" title="Quitar">✕</button></div>`;
 const filaCobro = (x = {}) => `<div class="cat-fila co"><input class="f" type="date" value="${x.fecha || todayStr()}"><input class="m" inputmode="decimal" placeholder="Monto" value="${x.monto ?? ''}"><select class="me">${CAT_MEDIOS.map((m) => `<option ${m === x.medio ? 'selected' : ''}>${m}</option>`).join('')}</select><input class="n" placeholder="Nota (ej: seña)" value="${esc(x.nota || '')}"><button type="button" class="sm" data-rm="1" title="Quitar">✕</button></div>`;
@@ -66,7 +66,7 @@ const filaCobro = (x = {}) => `<div class="cat-fila co"><input class="f" type="d
 function leerFilas(box) {
   const n = (el) => numIn(el.value);
   return {
-    items: $$('.cat-fila.it', box).map((r) => ({ d: $('.d', r).value.trim(), c: n($('.c', r)), p: n($('.p', r)) })).filter((i) => i.d || i.c || i.p),
+    items: $$('.cat-fila.it', box).map((r) => ({ d: $('.d', r).value.trim(), c: n($('.c', r)), p: n($('.p', r)), ...(r.dataset.menu ? { menuId: r.dataset.menu } : {}) })).filter((i) => i.d || i.c || i.p),
     equipo: $$('.cat-fila.eq', box).map((r) => ({ pid: $('.pid', r).value, desde: Number($('.a', r).value), hasta: Number($('.b', r).value) })).filter((e) => e.pid),
     gastos: $$('.cat-fila.ga', box).map((r) => ({ concepto: $('.d', r).value.trim(), monto: n($('.m', r)), fecha: $('.f', r).value })).filter((g) => g.concepto || g.monto),
     cobros: $$('.cat-fila.co', box).map((r) => ({ fecha: $('.f', r).value, monto: n($('.m', r)), medio: $('.me', r).value, nota: $('.n', r).value.trim() })).filter((x) => x.monto),
@@ -91,7 +91,7 @@ function catForm(c) {
   <h4 class="cat-h">🧾 Presupuesto <span class="small muted">(lo que se cobra)</span></h4>
   <div class="cat-cab small muted"><span>Detalle</span><span>Cant.</span><span>Precio c/u</span><span>Subtotal</span><span></span></div>
   <div id="catItems">${(c.items.length ? c.items : [{}]).map(filaItem).join('')}</div>
-  <div class="spread"><button type="button" class="sm" data-add="it">+ Agregar ítem</button><b>Total: <span id="catTot"></span></b></div>
+  <div class="spread"><div class="row" style="gap:8px"><button type="button" class="sm" data-add="it">+ Agregar ítem</button>${typeof menus === 'function' && menus().length ? `<select id="catMenu" style="width:auto"><option value="">📋 Agregar un menú armado…</option>${menus().map((m) => `<option value="${m.id}">${esc(m.nombre)} · ${fmtMoney(m.precioPersona)}/persona</option>`).join('')}</select>` : ''}</div><b>Total: <span id="catTot"></span></b></div>
 
   <h4 class="cat-h">💶 Cobros <span class="small muted">(seña, resto…)</span></h4>
   <div id="catCobros">${c.cobros.map(filaCobro).join('')}</div>
@@ -112,6 +112,14 @@ function catForm(c) {
   <label class="f mt">Notas<textarea name="notas" placeholder="Menú, alergias, horario de entrega…">${esc(c.notas || '')}</textarea></label>
   <div class="modal-actions">${isNew ? '' : '<button class="danger" id="catDel">Eliminar</button><button id="catPrint">🖨 Presupuesto</button>'}<button data-act="close">Cancelar</button><button class="pri" id="catOk">Guardar</button></div>`, (box) => {
     box.classList.add('modal-ancho');
+    const selMenu = $('#catMenu', box);
+    if (selMenu) selMenu.addEventListener('change', () => {
+      const m = menus().find((x) => x.id === selMenu.value); selMenu.value = ''; if (!m) return;
+      const pers = numIn($('[name=personas]', box).value) || 1;
+      $$('.cat-fila.it', box).forEach((r) => { if (!$('.d', r).value.trim() && !$('.c', r).value && !$('.p', r).value) r.remove(); });
+      $('#catItems', box).insertAdjacentHTML('beforeend', filaItem({ d: m.nombre + (m.descripcion ? ': ' + m.descripcion : ''), c: pers, p: m.precioPersona, menuId: m.id }));
+      upd(); toast(`Menú agregado para ${pers} persona${pers === 1 ? '' : 's'}`);
+    });
     const upd = () => {
       const r = leerFilas(box), tmp = { ...r }, tot = catTotal(tmp), cob = catCobrado(tmp), gas = catGastos(tmp);
       $$('.cat-fila.it', box).forEach((row) => { $('.st', row).textContent = fmtMoney(numIn($('.c', row).value) * numIn($('.p', row).value)); });
