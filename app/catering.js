@@ -86,12 +86,16 @@ function catForm(c) {
     <label class="f">Tipo de evento<input name="tipo" list="catTipos" value="${esc(c.tipo || '')}" placeholder="Ej: Coffee break"><datalist id="catTipos"><option value="Desayuno"><option value="Coffee break"><option value="Merienda"><option value="Brunch"><option value="Cumpleaños"><option value="Evento de empresa"><option value="Boda"></datalist></label>
     <label class="f">Personas<input name="personas" inputmode="numeric" value="${c.personas || ''}"></label>
     <label class="f full">Lugar / dirección<input name="lugar" value="${esc(c.lugar || '')}"></label>
+    <label class="f">Hora de armado<input type="time" name="armado" value="${esc(c.armado || '')}"></label>
+    <label class="f">Dietas especiales de los invitados<input name="dietas" value="${esc(c.dietas || '')}" placeholder="Ej: 2 sin gluten, 1 vegano"></label>
     <label class="f full">Estado<select name="estado">${Object.entries(CAT_ESTADOS).map(([k, e]) => `<option value="${k}" ${k === c.estado ? 'selected' : ''}>${e.lbl} · ${e.ayuda}</option>`).join('')}</select></label>
   </div>
   <h4 class="cat-h">🧾 Presupuesto <span class="small muted">(lo que se cobra)</span></h4>
   <div class="cat-cab small muted"><span>Detalle</span><span>Cant.</span><span>Precio c/u</span><span>Subtotal</span><span></span></div>
   <div id="catItems">${(c.items.length ? c.items : [{}]).map(filaItem).join('')}</div>
   <div class="spread"><div class="row" style="gap:8px"><button type="button" class="sm" data-add="it">+ Agregar ítem</button>${typeof menus === 'function' && menus().length ? `<select id="catMenu" style="width:auto"><option value="">📋 Agregar un menú armado…</option>${menus().map((m) => `<option value="${m.id}">${esc(m.nombre)} · ${fmtMoney(m.precioPersona)}/persona</option>`).join('')}</select>` : ''}</div><b>Total: <span id="catTot"></span></b></div>
+  <div id="catAlerg" class="mt"></div>
+  <details class="cat-prod mt"><summary>📋 Producción y compras para este evento</summary><div id="catProd"></div></details>
 
   <h4 class="cat-h">💶 Cobros <span class="small muted">(seña, resto…)</span></h4>
   <div id="catCobros">${c.cobros.map(filaCobro).join('')}</div>
@@ -109,8 +113,12 @@ function catForm(c) {
   <div class="spread"><button type="button" class="sm" data-add="eq">+ Agregar persona</button><span>Horas: <b id="catHs"></b></span></div>
   <p class="small muted" style="margin:4px 0 0">Si el catering está confirmado o realizado, estas horas se suman a las de cada persona en Turnos.</p>` : '<p class="small muted">Cargá al personal en Turnos → Personal para poder anotarlo acá.</p>'}
 
+  <h4 class="cat-h">🧺 Material para llevar</h4>
+  <div id="catMat">${(c.material || []).map(filaMat).join('')}</div>
+  <div class="spread"><div class="row" style="gap:8px"><button type="button" class="sm" data-add="ma">+ Agregar</button><button type="button" class="sm" id="matTipica">Poner la lista típica</button></div><span class="small muted">Tildá al cargar y al volver</span></div>
+
   <label class="f mt">Notas<textarea name="notas" placeholder="Menú, alergias, horario de entrega…">${esc(c.notas || '')}</textarea></label>
-  <div class="modal-actions">${isNew ? '' : '<button class="danger" id="catDel">Eliminar</button><button id="catPrint">🖨 Presupuesto</button>'}<button data-act="close">Cancelar</button><button class="pri" id="catOk">Guardar</button></div>`, (box) => {
+  <div class="modal-actions">${isNew ? '' : '<button class="danger" id="catDel">Eliminar</button><button id="catPrint">🖨 Presupuesto</button><button id="catHoja">🗒 Hoja del evento</button>'}<button data-act="close">Cancelar</button><button class="pri" id="catOk">Guardar</button></div>`, (box) => {
     box.classList.add('modal-ancho');
     const selMenu = $('#catMenu', box);
     if (selMenu) selMenu.addEventListener('change', () => {
@@ -127,8 +135,13 @@ function catForm(c) {
       $('#catTot', box).textContent = fmtMoney(tot); $('#catCob', box).textContent = fmtMoney(cob); $('#catSal', box).textContent = fmtMoney(Math.max(0, tot - cob));
       $('#catGas', box).textContent = fmtMoney(gas); const g = $('#catGan', box); g.textContent = fmtMoney(tot - gas); g.className = tot - gas >= 0 ? 'c-in' : 'c-out';
       const hs = $('#catHs', box); if (hs) hs.textContent = fmtH(catHoras(tmp));
+      const al = alergItems(r.items), dts = $('[name=dietas]', box).value.trim();
+      $('#catAlerg', box).innerHTML = al.length || dts ? `<div class="alg-aviso">⚠️ <b>Alérgenos del menú:</b> ${al.length ? alergChips(al) : 'ninguno marcado'}${dts ? `<div class="small mt">Dietas especiales: <b>${esc(dts)}</b></div>` : ''}</div>` : '';
+      $('#catProd', box).innerHTML = produccionHTML(r.items.map((i) => ({ ...i })));
     };
-    const filas = { it: ['#catItems', filaItem], co: ['#catCobros', filaCobro], ga: ['#catGastos', filaGasto], eq: ['#catEquipo', filaEquipo] };
+    const filas = { it: ['#catItems', filaItem], co: ['#catCobros', filaCobro], ga: ['#catGastos', filaGasto], eq: ['#catEquipo', filaEquipo], ma: ['#catMat', filaMat] };
+    $('#matTipica', box).onclick = () => { const ya = new Set(leerMat(box).map((m) => m.d.toLowerCase())); MATERIAL_TIPICO.filter((d) => !ya.has(d.toLowerCase())).forEach((d) => $('#catMat', box).insertAdjacentHTML('beforeend', filaMat({ d }))); };
+    let luegoHoja = false;
     box.onclick = (e) => {
       const add = e.target.closest('[data-add]'); if (add) { const [sel, fn] = filas[add.dataset.add]; $(sel, box).insertAdjacentHTML('beforeend', fn()); upd(); return; }
       if (e.target.dataset.rm && e.target.closest('.cat-fila')) { e.target.closest('.cat-fila').remove(); upd(); }
@@ -137,14 +150,16 @@ function catForm(c) {
     if (!isNew) {
       $('#catDel', box).onclick = () => confirmBox(`Se va a eliminar el catering de <b>${esc(catNombre(c))}</b> del ${fmtDate(c.fecha)}.`, () => { state.caterings = catList().filter((x) => x.id !== c.id); commit(); toast('Catering eliminado'); }, 'Eliminar');
       $('#catPrint', box).onclick = () => catImprimir(c);
+      $('#catHoja', box).onclick = () => { luegoHoja = true; $('#catOk', box).click(); };
     }
     $('#catOk', box).onclick = () => {
       const v = vals(box), r = leerFilas(box);
       if (!v.cliente) return toast('Poné el nombre del cliente');
       if (r.equipo.some((e) => e.hasta <= e.desde)) return toast('En el personal, la salida tiene que ser después de la entrada');
-      const data = { cliente: v.cliente, contacto: v.contacto, fecha: v.fecha || todayStr(), hora: v.hora, tipo: v.tipo, personas: numIn(v.personas) || '', lugar: v.lugar, estado: v.estado, notas: v.notas, factura: { numero: v.facNum, fecha: v.facFecha || (v.facNum ? todayStr() : '') }, ...r };
+      const data = { cliente: v.cliente, contacto: v.contacto, fecha: v.fecha || todayStr(), hora: v.hora, tipo: v.tipo, personas: numIn(v.personas) || '', lugar: v.lugar, armado: v.armado, dietas: v.dietas, material: leerMat(box), estado: v.estado, notas: v.notas, factura: { numero: v.facNum, fecha: v.facFecha || (v.facNum ? todayStr() : '') }, ...r };
       if (isNew) { c = { id: uid(), creado: new Date().toISOString(), ...data }; (state.caterings || (state.caterings = [])).push(c); } else Object.assign(c, data);
       closeModal(); commit();
+      if (luegoHoja) return catHoja(c);
       const ch = catCuenta(c) ? choques(c.fecha, c.fecha).filter((x) => (x.l1 === 'catering' || x.l2 === 'catering') && c.equipo.some((e) => e.pid === x.pid)) : [];
       if (ch.length) openModal(`<h3>⚠️ Ojo</h3><p>Se guardó el catering, pero ${ch.map((x) => `<b>${esc(persona(x.pid).nombre)}</b> también figura en <b>${esc(localInfo(x.l1 === 'catering' ? x.l2 : x.l1).nombre)}</b> de ${hhmm(x.a)} a ${hhmm(x.b)}`).join('; ')}. Revisá cuál va.</p><div class="modal-actions"><button class="pri" data-act="close">Entendido</button></div>`);
       else toast('Catering guardado ✔');
@@ -161,6 +176,7 @@ function catImprimir(c) {
   <table><thead><tr><th>Detalle</th><th class="num">Cantidad</th><th class="num">Precio c/u</th><th class="num">Subtotal</th></tr></thead><tbody>
   ${(c.items || []).map((i) => `<tr><td>${esc(i.d)}</td><td class="num">${fmtNum(i.c)}</td><td class="num">${fmtMoney(i.p)}</td><td class="num">${fmtMoney(i.c * i.p)}</td></tr>`).join('')}
   <tr><td colspan="3"><b>TOTAL</b></td><td class="num"><b>${fmtMoney(tot)}</b></td></tr></tbody></table>
+  ${alergItems(c.items).length ? `<p><b>Alérgenos:</b> ${alergItems(c.items).map((k) => ALERG[k].n).join(', ')}</p>` : ''}${c.dietas ? `<p><b>Dietas especiales:</b> ${esc(c.dietas)}</p>` : ''}
   ${catCobrado(c) ? `<p>Ya abonado: ${fmtMoney(catCobrado(c))} · Resta: <b>${fmtMoney(catSaldo(c))}</b></p>` : ''}
   <p class="small">Presupuesto emitido el ${fmtDate(todayStr())}.</p>`;
   document.body.classList.add('cat-print');

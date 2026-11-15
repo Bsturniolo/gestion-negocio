@@ -16,8 +16,8 @@ function cargarEjemplos() {
   // productos: ingredientes, elaborados con receta y reventa
   const P = (o) => ({ id: id(), creado: new Date().toISOString(), codigo: '', campos: [], notas: '', foto: '', local: loc, stockMin: 0, precio: 0, ...o, ...E });
   const cafe = P({ nombre: 'Café en grano' + EJ, categoria: 'Ingredientes', unidad: 'kg', costo: 18, stock: 6, stockMin: 3, proveedorId: pv1.id });
-  const leche = P({ nombre: 'Leche entera' + EJ, categoria: 'Ingredientes', unidad: 'litros', costo: 0.95, stock: 20, stockMin: 12, proveedorId: pv2.id });
-  const pan = P({ nombre: 'Pan para tostar' + EJ, categoria: 'Ingredientes', unidad: 'rebanadas', costo: 0.22, stock: 60, stockMin: 20 });
+  const leche = P({ nombre: 'Leche entera' + EJ, categoria: 'Ingredientes', unidad: 'litros', costo: 0.95, stock: 20, stockMin: 12, proveedorId: pv2.id, alergenos: ['lacteos'] });
+  const pan = P({ nombre: 'Pan para tostar' + EJ, categoria: 'Ingredientes', unidad: 'rebanadas', costo: 0.22, stock: 60, stockMin: 20, alergenos: ['gluten', 'sesamo'] });
   const tomate = P({ nombre: 'Tomate triturado' + EJ, categoria: 'Ingredientes', unidad: 'kg', costo: 2.4, stock: 3, stockMin: 1 });
   const aceite = P({ nombre: 'Aceite de oliva' + EJ, categoria: 'Ingredientes', unidad: 'litros', costo: 8, stock: 4, stockMin: 1 });
   const cl = P({ nombre: 'Café con leche' + EJ, categoria: 'Cafetería', unidad: 'unidades', precio: 1.6, stock: 0, receta: { rinde: 1, items: [{ pid: cafe.id, cant: 0.018 }, { pid: leche.id, cant: 0.15 }] } });
@@ -52,7 +52,7 @@ function cargarEjemplos() {
   state.config.menus = [...menus(), mn1, mn2];
   state.caterings = state.caterings || [];
   state.caterings.push(
-    { id: id(), creado: new Date().toISOString(), fecha: d(4), hora: '10:00', cliente: 'Empresa López' + EJ, contacto: '+34 600 000 003', lugar: 'Oficinas, calle Mayor 10', tipo: 'Coffee break', personas: 30, estado: 'confirmado', items: [{ d: mn1.nombre + ': ' + mn1.descripcion, c: 30, p: 7.5, menuId: mn1.id }], cobros: [{ fecha: d(-2), monto: 70, medio: 'Transferencia', nota: 'seña' }], gastos: [{ concepto: 'Alquiler de termos', monto: 25, fecha: d(-1) }], equipo: [{ pid: s2.id, desde: 9 * 60, hasta: 12 * 60 }], factura: { numero: '', fecha: '' }, notas: 'Dos personas sin gluten.', ...E },
+    { id: id(), creado: new Date().toISOString(), fecha: d(4), hora: '10:00', cliente: 'Empresa López' + EJ, contacto: '+34 600 000 003', lugar: 'Oficinas, calle Mayor 10', tipo: 'Coffee break', personas: 30, estado: 'confirmado', items: [{ d: mn1.nombre + ': ' + mn1.descripcion, c: 30, p: 7.5, menuId: mn1.id }], cobros: [{ fecha: d(-2), monto: 70, medio: 'Transferencia', nota: 'seña' }], gastos: [{ concepto: 'Alquiler de termos', monto: 25, fecha: d(-1) }], equipo: [{ pid: s2.id, desde: 9 * 60, hasta: 12 * 60 }], factura: { numero: '', fecha: '' }, armado: '09:15', dietas: '2 sin gluten, 1 sin lactosa', material: [{ d: 'Termos de café', cant: 3, ida: false, vuelta: false }, { d: 'Vasos y tazas', cant: 35, ida: false, vuelta: false }, { d: 'Bandejas', cant: 4, ida: false, vuelta: false }], notas: 'Entrar por la puerta de atrás; preguntar por Carla.', ...E },
     { id: id(), creado: new Date().toISOString(), fecha: d(12), hora: '09:00', cliente: 'Cumple de Marta' + EJ, contacto: '', lugar: '', tipo: 'Desayuno', personas: 15, estado: 'presupuesto', items: [{ d: mn2.nombre + ': ' + mn2.descripcion, c: 15, p: 9.5, menuId: mn2.id }], cobros: [], gastos: [], equipo: [], factura: { numero: '', fecha: '' }, notas: '', ...E },
   );
   // cierres de caja: uno que cuadra y uno con faltante

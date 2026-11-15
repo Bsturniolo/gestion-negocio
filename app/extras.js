@@ -99,6 +99,7 @@ function vMenus() {
   ${l.length ? `<div class="grid menus-grid">${l.map((m) => { const c = costoMenu(m), g = (m.precioPersona || 0) - c; return `<div class="card menu-card" data-act="menuEdit" data-id="${m.id}"><div class="spread"><b>${esc(m.nombre)}</b><span class="badge in">${fmtMoney(m.precioPersona)} / persona</span></div>
     ${m.descripcion ? `<div class="small muted mt">${esc(m.descripcion)}</div>` : ''}
     <div class="small mt">${(m.items || []).map((it) => esc(it.pid && prod(it.pid) ? prod(it.pid).nombre : it.d)).join(' · ')}</div>
+    ${alergMenu(m).length ? `<div class="mt">${alergChips(alergMenu(m), false)}</div>` : ''}
     <div class="small mt">Cuesta ${fmtMoney(c)} por persona · ganás <b class="${g >= 0 ? 'c-in' : 'c-out'}">${fmtMoney(g)}</b></div></div>`; }).join('')}</div>`
   : '<div class="card empty">Todavía no hay menús. Creá por ejemplo <b>Desayuno de trabajo</b>, <b>Coffee break</b> o <b>Cóctel</b>.</div>'}`;
 }
@@ -119,7 +120,8 @@ function menuForm(m) {
     const upd = () => {
       $$('.cat-fila.mn', box).forEach((r) => { const q = prod($('.mp', r).value); $('.md', r).style.display = q ? 'none' : ''; $('.mo', r).style.display = q ? 'none' : ''; });
       const c = costoMenu({ items: leer() }), pr = numIn($('[name=precioPersona]', box).value);
-      $('#mnRes', box).innerHTML = `Cuesta <b>${fmtMoney(c)}</b> por persona${pr ? ` · ganás <b class="${pr - c >= 0 ? 'c-in' : 'c-out'}">${fmtMoney(pr - c)}</b>` : c ? ` · precio sugerido ${fmtMoney(Math.ceil(c / 0.35 * 2) / 2)} (costo ≈ 35%)` : ''}`;
+      const al = alergMenu({ items: leer() });
+      $('#mnRes', box).innerHTML = (al.length ? `<div class="mb6">Alérgenos: ${alergChips(al, false)}</div>` : '') + `Cuesta <b>${fmtMoney(c)}</b> por persona${pr ? ` · ganás <b class="${pr - c >= 0 ? 'c-in' : 'c-out'}">${fmtMoney(pr - c)}</b>` : c ? ` · precio sugerido ${fmtMoney(Math.ceil(c / 0.35 * 2) / 2)} (costo ≈ 35%)` : ''}`;
     };
     $('#mnAdd', box).onclick = () => { $('#mnItems', box).insertAdjacentHTML('beforeend', filaMenu()); upd(); };
     box.onclick = (e) => { if (e.target.dataset.rm && e.target.closest('.cat-fila')) { e.target.closest('.cat-fila').remove(); upd(); } };

@@ -301,8 +301,8 @@ tr.clic{cursor:pointer}tr.clic:hover td{background:#f6faf8}
   .paleta-dock .pin{flex-shrink:0;min-height:40px}
   .xls-wrap{max-height:70vh}
   /* formularios a pantalla completa, con los botones siempre a mano */
-  #modal{padding:0;align-items:stretch}
-  .modal-box{border-radius:0;min-height:100%;max-width:none!important;padding:16px 14px 0}
+  #modal{padding:0;align-items:flex-start}
+  .modal-box{border-radius:0;min-height:100%;min-height:100dvh;max-width:none!important;padding:16px 14px 0}
   .modal-actions{position:sticky;bottom:0;background:#fff;margin:18px -14px 0;padding:10px 14px calc(10px + env(safe-area-inset-bottom));border-top:1px solid var(--line)}
   .modal-actions>*{flex:1 1 auto;justify-content:center}
   .kpi .val{font-size:22px}
@@ -347,3 +347,22 @@ tr.clic{cursor:pointer}tr.clic:hover td{background:#f6faf8}
   .banner-ej .row{width:100%}.banner-ej .row button{flex:1}
   .menus-grid{grid-template-columns:1fr}
 }
+
+/* Alérgenos, producción, material */
+.alg-pick{display:flex;flex-wrap:wrap;gap:8px}
+.alg-op{display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--line);border-radius:20px;padding:6px 12px;background:#fff;cursor:pointer;font-size:14px;min-height:38px}
+.alg-op input{width:auto;min-height:0;margin:0}
+.alg-op.on{border-color:#e0a100;background:#fff6e0}
+.alg-lista{display:inline-flex;flex-wrap:wrap;gap:6px;vertical-align:middle}
+.alg{background:#fff6e0;border:1px solid #f0d58c;border-radius:12px;padding:2px 8px;font-size:13px;white-space:nowrap}
+.alg-mini .alg{padding:0 4px;font-size:12px;border:0;background:none}
+.alg-aviso{background:#fff6e0;border:1px solid #f0d58c;border-radius:12px;padding:10px 12px}
+.cat-prod{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:#fafcfb}
+.cat-prod summary{cursor:pointer;font-weight:600;padding:4px 0}
+.prod-lista{margin:6px 0 12px;padding-left:20px}
+.cat-fila.ma{grid-template-columns:1fr 80px auto auto 40px}
+.chk{display:inline-flex;align-items:center;gap:5px;font-size:14px;white-space:nowrap}
+.chk input{width:auto;min-height:0;margin:0}
+.mb6{margin-bottom:6px}
+@media print{ #catPrintArea .hoja-alerta{border:2px solid #000;padding:8px;margin:10px 0} }
+@media (max-width:760px){ .cat-fila.ma{grid-template-columns:90px 1fr 1fr}.cat-fila.ma .d{grid-area:1/1/2/3}.cat-fila.ma button{grid-area:1/3;justify-self:end}.cat-fila.ma .c{grid-area:2/1}.cat-fila.ma .ci{grid-area:2/2}.cat-fila.ma .cv{grid-area:2/3} }

@@ -341,7 +341,7 @@ function vProductos() {
   ${list.length ? `<div class="grid prods">${list.map((p) => {
     const bajo = p.stockMin > 0 && p.stock <= p.stockMin;
     return `<div class="card prod" data-act="prodView" data-id="${p.id}"><div class="ph" style="${p.foto ? `background-image:url('${p.foto}')` : ''}">${p.foto ? '' : '📦'}</div>
-    <div class="bd"><div class="nm">${esc(p.nombre)}</div><div class="meta">${typeof verTodos === 'function' && verTodos() ? `<span class="sw" style="background:${localInfo(localDe(p)).color}"></span>${esc(localInfo(localDe(p)).nombre)} · ` : ''}${esc(p.categoria || 'Sin categoría')}${p.proveedorId && prov(p.proveedorId) ? ' · ' + esc(prov(p.proveedorId).nombre) : ''}</div>
+    <div class="bd"><div class="nm">${esc(p.nombre)}${alergDe(p).length ? ` <span class="alg-mini">${alergChips(alergDe(p), false)}</span>` : ''}</div><div class="meta">${typeof verTodos === 'function' && verTodos() ? `<span class="sw" style="background:${localInfo(localDe(p)).color}"></span>${esc(localInfo(localDe(p)).nombre)} · ` : ''}${esc(p.categoria || 'Sin categoría')}${p.proveedorId && prov(p.proveedorId) ? ' · ' + esc(prov(p.proveedorId).nombre) : ''}</div>
     <div class="spread"><span>${fmtMoney(p.precio)}</span>${esElaborado(p) ? `<span class="badge inv">Elaborado · gana ${fmtMoney(p.precio - costoDe(p))}</span>` : `<span class="badge ${p.stock <= 0 ? 'out' : bajo ? 'warn' : 'in'}">Stock: ${fmtNum(p.stock)} ${esc(p.unidad || '')}</span>`}</div></div></div>`;
   }).join('')}</div>` : `<div class="card empty">${prods().length ? 'No hay productos que coincidan con la búsqueda.' : 'Todavía no cargaste productos. Tocá <b>➕ Nuevo producto</b> para empezar.'}</div>`}`;
 }
@@ -559,6 +559,7 @@ function prodForm(p) {
     <label class="f full">Notas<textarea name="notas">${esc(p.notas)}</textarea></label>
   </div>
   ${recetaSeccion(p)}
+  ${alergSeccion(p)}
   <div class="modal-actions">${isNew ? '' : '<button class="danger" id="pDel">Eliminar</button>'}<button data-act="close">Cancelar</button><button class="pri" id="pSave">Guardar</button></div>`, (box) => {
     $('#pFoto', box).onchange = async (e) => { const f = e.target.files[0]; if (!f) return; try { foto = await resizeImage(f); const pv = $('#pPrev', box); pv.style.backgroundImage = `url('${foto}')`; pv.textContent = ''; } catch (err) { toast(err.message); } };
     const del = $('#pFotoDel', box); if (del) del.onclick = () => { foto = ''; const pv = $('#pPrev', box); pv.style.backgroundImage = ''; pv.textContent = '📷'; del.remove(); };
@@ -570,7 +571,7 @@ function prodForm(p) {
       const v = vals(box); if (!v.nombre) return toast('Poné un nombre al producto');
       const campos = $$('.extra', box).map((r) => ({ k: $('.ck', r).value.trim(), v: $('.cv', r).value.trim() })).filter((c) => c.k || c.v);
       const receta = recetaLeer(box);
-      const data = { nombre: v.nombre, categoria: v.categoria, codigo: v.codigo, unidad: v.unidad, costo: receta ? costoReceta(receta) : numIn(v.costo), precio: numIn(v.precio), stockMin: numIn(v.stockMin), proveedorId: v.proveedorId, notas: v.notas, campos, foto, receta: receta || null };
+      const data = { nombre: v.nombre, categoria: v.categoria, codigo: v.codigo, unidad: v.unidad, costo: receta ? costoReceta(receta) : numIn(v.costo), precio: numIn(v.precio), stockMin: numIn(v.stockMin), proveedorId: v.proveedorId, notas: v.notas, campos, foto, receta: receta || null, alergenos: alergLeer(box) };
       if (isNew) {
         const np = { id: uid(), creado: new Date().toISOString(), stock: numIn(v.stock), local: v.local || localActivo(), ...data }; state.productos.push(np);
         if (np.stock) state.stockMovs.push({ id: uid(), fecha: todayStr(), productoId: np.id, tipo: 'ajuste', cantidad: np.stock, nota: 'Stock inicial' });
@@ -590,6 +591,7 @@ function prodView(id) {
   openModal(`<div class="spread"><h3 style="margin:0">${esc(p.nombre)}</h3><button class="sm" data-act="close">✕</button></div>
   ${p.foto ? `<img src="${p.foto}" alt="" style="width:100%;max-height:300px;object-fit:contain;border-radius:10px;background:#f4f6f5;margin-top:12px">` : ''}
   <div class="grid kpis mt">${kpi('Stock', `${fmtNum(p.stock)} <span class="small muted">${esc(p.unidad || '')}</span>`, p.stockMin && p.stock <= p.stockMin ? 'c-warn' : '')}${kpi('Precio venta', fmtMoney(p.precio))}${kpi(esElaborado(p) ? 'Costo por porción' : 'Costo', fmtMoney(costo), '', costo ? `Ganancia ${fmtMoney(p.precio - costo)} (${fmtNum(Math.round(margen))}% del precio)` : '')}${kpi('Vendido', fmtNum(uVend), '', fmtMoney($vend))}</div>
+  ${alergDe(p).length ? `<div class="mt"><b>Alérgenos:</b> ${alergChips(alergDe(p))}</div>` : ''}
   ${esElaborado(p) ? recetaDetalle(p) : ''}
   <table class="mt small"><tbody>
     <tr><td class="muted">Categoría</td><td>${esc(p.categoria || '—')}</td></tr>
