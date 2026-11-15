@@ -26,21 +26,34 @@ function cargarEjemplos() {
   const choco = I('Chocolate de cobertura', 'kg', 9, 3, 1, { alergenos: ['lacteos', 'soja'] });
   const fresas = I('Fresas', 'kg', 4.5, 2, 1);
   const mascarpone = I('Mascarpone', 'kg', 8, 2, 1, { proveedorId: pv2.id, alergenos: ['lacteos'] });
-  const pan = I('Pan de cristal', 'unidades', 0.6, 30, 10, { alergenos: ['gluten'] });
+  const pan = I('Baguette', 'unidades', 0.6, 30, 10, { alergenos: ['gluten'] });
   const pollo = I('Pollo asado desmenuzado', 'kg', 7, 3, 1);
   const aguacate = I('Aguacate', 'unidades', 0.8, 12, 6);
-  const R = (nombre, categoria, precio, rinde, items) => P({ nombre: nombre + EJ, categoria, unidad: 'unidades', precio, stock: 0, receta: { rinde, items: items.map(([p, cant]) => ({ pid: p.id, cant })) } });
+  const NE = 'Precio estimado: corregir con la carta real.';
+  const R = (nombre, categoria, precio, rinde, items) => P({ nombre: nombre + EJ, categoria, unidad: 'unidades', precio, stock: 0, notas: NE, receta: { rinde, items: items.map(([p, cant]) => ({ pid: p.id, cant })) } });
   const cl = R('Café con leche', 'Cafetería', 1.6, 1, [[cafe, 0.018], [leche, 0.15]]);
   const cortado = R('Cortado', 'Cafetería', 1.4, 1, [[cafe, 0.018], [leche, 0.05]]);
   const croissant = R('Croissant de mantequilla', 'Pastelería', 1.8, 12, [[harina, 0.5], [manteca, 0.3], [huevos, 1], [azucar, 0.06]]);
   const tiramisu = R('Tiramisú (porción)', 'Pastelería', 4.5, 10, [[mascarpone, 0.5], [huevos, 4], [azucar, 0.15], [cafe, 0.03], [harina, 0.15]]);
   const eclair = R('Éclair de chocolate', 'Pastelería', 3.2, 12, [[harina, 0.15], [manteca, 0.1], [huevos, 4], [choco, 0.2], [leche, 0.5]]);
   const tarta = R('Tarta de fresas (porción)', 'Pastelería', 4.2, 8, [[harina, 0.25], [manteca, 0.12], [huevos, 2], [azucar, 0.15], [fresas, 0.5], [leche, 0.3]]);
-  const tost = R('Sándwich di pollo y aguacate', 'Salado', 6.5, 1, [[pan, 1], [pollo, 0.08], [aguacate, 0.5]]);
+  const tost = R('Baguette de pollo y aguacate', 'Salado', 6.5, 1, [[pan, 1], [pollo, 0.08], [aguacate, 0.5]]);
+  // Más productos que se nombran en reseñas de di Nardi (Tripadvisor, Gastroranking, Too Good To Go); sin receta, costo y precio estimados
+  const V = (nombre, categoria, costo, precio) => P({ nombre: nombre + EJ, categoria, unidad: 'unidades', costo, precio, stock: 0, notas: NE });
+  const panIberico = V('Pan de aceitunas con ibérico, tomate y aceite', 'Salado', 1.9, 5.5);
+  const miniSand = V('Mini sándwich gourmet', 'Salado', 0.55, 1.6);
+  const flauta = V('Flauta de viento', 'Pastelería', 0.35, 1.3);
+  const trucha = V('Trucha de batata (canaria)', 'Pastelería', 0.4, 1.5);
+  const manzana = V('Pastel de manzana (porción)', 'Pastelería', 0.6, 3.5);
+  const miniPast = V('Mini pastelito surtido', 'Pastelería', 0.25, 0.9);
+  const fruta = V('Brocheta de fruta fresca', 'Catering', 0.5, 1.8);
+  const ensalada = V('Ensalada fresca (ración)', 'Catering', 1.2, 4.5);
+  const zumo = V('Zumo de naranja natural', 'Bebidas', 0.9, 3);
   const agua = P({ nombre: 'Agua 500 ml' + EJ, categoria: 'Bebidas', unidad: 'unidades', costo: 0.3, precio: 1.5, stock: 10, stockMin: 12 });
   const elab = [cl, cortado, croissant, tiramisu, eclair, tarta, tost];
+  const sinReceta = [panIberico, miniSand, flauta, trucha, manzana, miniPast, fruta, ensalada, zumo];
   elab.forEach((p) => (p.costo = costoReceta(p.receta)));
-  state.productos.push(cafe, leche, harina, manteca, huevos, azucar, choco, fresas, mascarpone, pan, pollo, aguacate, ...elab, agua);
+  state.productos.push(cafe, leche, harina, manteca, huevos, azucar, choco, fresas, mascarpone, pan, pollo, aguacate, ...elab, ...sinReceta, agua);
   // movimientos de plata
   const M = (o) => ({ id: id(), creado: new Date().toISOString(), local: loc, ...o, ...E });
   state.movimientos.push(
@@ -63,10 +76,13 @@ function cargarEjemplos() {
     const dd = diaDoc(f, lid); if (dd) dd.ejemplo = true;
   });
   // menús y caterings
-  const mn1 = { id: id(), nombre: 'Coffee break' + EJ, descripcion: 'Café recién hecho, agua, croissant y éclair', precioPersona: 7.5, items: [{ pid: cl.id, cant: 1 }, { pid: agua.id, cant: 1 }, { pid: croissant.id, cant: 1 }, { pid: eclair.id, cant: 1 }], ...E };
-  const mn2 = { id: id(), nombre: 'Desayuno de trabajo' + EJ, descripcion: 'Café con leche, sándwich di pollo y aguacate y zumo natural', precioPersona: 11, items: [{ pid: cl.id, cant: 1 }, { pid: tost.id, cant: 1 }, { pid: '', d: 'Zumo de naranja natural', cant: 1, costo: 0.9 }], ...E };
-  const mn3 = { id: id(), nombre: 'Merienda artesanal' + EJ, descripcion: 'Café, tiramisú y tarta de fresas', precioPersona: 9, items: [{ pid: cortado.id, cant: 1 }, { pid: tiramisu.id, cant: 1 }, { pid: tarta.id, cant: 1 }], ...E };
-  state.config.menus = [...menus(), mn1, mn2, mn3];
+  // Los 4 servicios que ofrece pasteleriadinardi.com/catering. Precios por persona estimados (la web no publica precios).
+  const MN = (nombre, descripcion, precioPersona, items) => ({ id: id(), nombre: nombre + EJ, descripcion, precioPersona, items: items.map(([p, cant]) => ({ pid: p.id, cant })), notas: NE, ...E });
+  const mn1 = MN('Coffee break', 'Café recién hecho, agua, bollería artesanal y mini pastelitos', 7.5, [[cl, 1], [agua, 1], [croissant, 1], [miniPast, 2]]);
+  const mn2 = MN('Desayuno de trabajo', 'Café con leche, baguette de pollo y aguacate y zumo natural', 11, [[cl, 1], [tost, 1], [zumo, 1]]);
+  const mn3 = MN('Merienda artesanal', 'Café, tiramisú, tarta de fresas y flautas de viento', 9, [[cortado, 1], [tiramisu, 1], [tarta, 1], [flauta, 1]]);
+  const mn4 = MN('Almuerzo', 'Buffet fresco: mini sándwiches gourmet, pan de aceitunas con ibérico, ensalada, fruta y agua', 16, [[miniSand, 3], [panIberico, 1], [ensalada, 1], [fruta, 1], [agua, 1]]);
+  state.config.menus = [...menus(), mn1, mn2, mn3, mn4];
   state.caterings = state.caterings || [];
   state.caterings.push(
     { id: id(), creado: new Date().toISOString(), fecha: d(4), hora: '10:00', cliente: 'Empresa López' + EJ, contacto: '+34 600 000 003', lugar: 'Oficinas, calle Mayor 10', tipo: 'Coffee break', personas: 30, estado: 'confirmado', items: [{ d: mn1.nombre + ': ' + mn1.descripcion, c: 30, p: 7.5, menuId: mn1.id }], cobros: [{ fecha: d(-2), monto: 70, medio: 'Transferencia', nota: 'seña' }], gastos: [{ concepto: 'Alquiler de termos', monto: 25, fecha: d(-1) }], equipo: [{ pid: s2.id, desde: 9 * 60, hasta: 12 * 60 }], factura: { numero: '', fecha: '' }, armado: '09:15', dietas: '2 sin gluten, 1 sin lactosa', material: [{ d: 'Termos de café', cant: 3, ida: false, vuelta: false }, { d: 'Vasos y tazas', cant: 35, ida: false, vuelta: false }, { d: 'Bandejas', cant: 4, ida: false, vuelta: false }], notas: 'Entrar por la puerta de atrás; preguntar por Carla.', ...E },
@@ -134,12 +150,13 @@ function ajustesEjemplos() {
   return `<h2>di Nardi</h2><div class="card"><p style="margin-top:0">${esDiNardi() ? 'La app ya está con los datos de di Nardi.' : 'Pone el nombre di Nardi, el euro y los 3 locales de la web.'} Locales: ${DINARDI.map((d) => `<b>${esc(d.nombre)}</b> · ${esc(d.dir)} · ${esc(d.tel)}`).join('<br>')}</p>
   <div class="row"><button ${esDiNardi() ? '' : 'class="pri" '}data-act="dnUsar">${esDiNardi() ? 'Volver a poner los locales de di Nardi' : '☕ Usar datos de di Nardi'}</button></div></div>
   <h2>Datos de ejemplo</h2><div class="card"><p style="margin-top:0">Ejemplos de productos con receta, menús de catering, turnos, cierres de caja y deudas para ver cómo funciona todo. Llevan <i>(ejemplo)</i> en el nombre y se pueden borrar todos juntos sin tocar lo real.</p>
-  <div class="row">${hayEjemplos() ? '<button data-act="ejBorrar">🧹 Borrar todos los ejemplos</button>' : '<button class="pri" data-act="ejCargar">📚 Cargar ejemplos</button>'}</div></div>`;
+  <div class="row">${hayEjemplos() ? '<button data-act="ejRenovar">🔄 Cambiar por los ejemplos nuevos</button><button data-act="ejBorrar">🧹 Borrar todos los ejemplos</button>' : '<button class="pri" data-act="ejCargar">📚 Cargar ejemplos</button>'}</div></div>`;
 }
 
 Object.assign(ACTS, {
   ejCargar: () => cargarEjemplos(),
   ejBorrar: () => confirmBox('Se van a borrar todos los datos que dicen <b>(ejemplo)</b>. Lo que cargaste vos no se toca.', borrarEjemplos, 'Borrar ejemplos'),
   dnUsar: () => preguntarDiNardi(),
+  ejRenovar: () => confirmBox('Se borran los ejemplos que hay y se cargan los nuevos (productos y menús de catering de di Nardi). Lo que cargaste vos no se toca.', () => { borrarEjemplos(); cargarEjemplos(); }, 'Cambiar ejemplos'),
   ejNo: () => { state.config.ejemplosVisto = true; commit(); },
 });
