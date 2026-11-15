@@ -430,3 +430,34 @@ input[type=checkbox],input[type=radio]{accent-color:var(--pri)}
 .loc{transition:font-size .15s,padding .15s}
 .loc.sel{font-size:16.5px;padding:9px 18px;box-shadow:0 3px 10px #4d2d1833}
 @media (max-width:760px){ .loc.sel{min-height:46px;font-size:17px} }
+
+/* Asistente */
+.as-comp textarea{min-height:110px;font-size:16px;border:1.5px solid var(--line)}
+.as-comp-b{display:flex;justify-content:flex-end;gap:10px;margin-top:10px;flex-wrap:wrap}
+.as-ej{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0 18px}
+.as-lista{display:grid;gap:18px}
+.as-par{display:grid;gap:8px}
+.as-yo{display:flex;justify-content:flex-end}
+.as-yo .as-burb{background:var(--pri);color:#fff;border-radius:16px 16px 4px 16px;max-width:min(560px,88%);white-space:normal;word-break:break-word}
+.as-app .as-burb{background:#fff;border:1px solid var(--line);border-radius:16px 16px 16px 4px;max-width:760px}
+.as-burb{padding:12px 14px;font-size:15px}
+.as-acc{border:1.5px solid #e9d6c3;border-radius:12px;padding:12px;margin-top:12px;background:#fdf9f5}
+.as-acc.hecho{display:flex;justify-content:space-between;align-items:center;gap:10px;background:#eef6ef;border-color:#bfdcc5;color:var(--in);font-weight:600}
+.as-acc.descartado{display:flex;justify-content:space-between;align-items:center;gap:10px;color:var(--muted);background:#fff;border-style:dashed}
+.as-acc-t{margin-bottom:10px;font-size:15px}
+.as-acc-b{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;flex-wrap:wrap}
+.as-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.as-grid .full{grid-column:1/-1}
+.as-items{display:grid;gap:8px;margin-bottom:12px}
+.as-it{display:grid;grid-template-columns:1.6fr 110px 110px 40px;gap:8px;align-items:end;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.as-it-p{display:grid;gap:6px}
+.as-it button{min-height:40px;justify-content:center}
+button.as-ini{border:2px solid var(--oliva,#506345);color:var(--oliva,#506345);font-weight:700}
+@media (max-width:760px){
+  .as-grid{grid-template-columns:1fr 1fr}
+  .as-it{grid-template-columns:1fr 1fr 44px}.as-it .as-it-p{grid-column:1/-1}
+  .as-ej{flex-wrap:nowrap;overflow-x:auto;margin-left:-12px;margin-right:-12px;padding:2px 12px;scrollbar-width:none}
+  .as-ej>*{flex-shrink:0}
+  .as-acc-b button{flex:1;min-height:44px;justify-content:center}
+}
+.as-grid>label:last-child:nth-child(odd){grid-column:1/-1}

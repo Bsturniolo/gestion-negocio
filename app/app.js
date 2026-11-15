@@ -237,7 +237,7 @@ const NAV_SEC = ['productos', 'proveedores', 'balance', 'calendario', 'ajustes',
 function go(v) { view = v; $$('#nav a').forEach((a) => a.classList.toggle('active', a.dataset.view === v || (a.dataset.view === 'mas' && NAV_SEC.includes(v)))); render(); window.scrollTo(0, 0); }
 // Celular: pantalla "Más" con el resto de las secciones
 function vMas() {
-  const items = [['inicio', '🏠', 'Inicio'], ['turnos', '👥', 'Turnos'], ['catering', '🍽️', 'Catering'], ['finanzas', '💵', 'Movimientos'], ['productos', '📦', 'Productos y stock'], ['proveedores', '🚚', 'Proveedores'], ['balance', '📊', 'Balance'], ['calendario', '📅', 'Calendario y deudas'], ['ajustes', '⚙️', 'Ajustes']];
+  const items = [['inicio', '🏠', 'Inicio'], ['asistente', '💬', 'Asistente'], ['turnos', '👥', 'Turnos'], ['catering', '🍽️', 'Catering'], ['finanzas', '💵', 'Movimientos'], ['productos', '📦', 'Productos y stock'], ['proveedores', '🚚', 'Proveedores'], ['balance', '📊', 'Balance'], ['calendario', '📅', 'Calendario y deudas'], ['ajustes', '⚙️', 'Ajustes']];
   return `<h1>Menú</h1><div class="mas-grid">${items.map(([v, i, l]) => `<button class="mas-it" data-act="goto" data-id="${v}"><span>${i}</span>${l}</button>`).join('')}</div><p class="small muted mt">versión ${esc(window.APP_VERSION || '')}</p>`;
 }
 
@@ -249,7 +249,7 @@ function render() {
   document.body.classList.toggle('login', !!needLogin());
   syncBadge();
   if (needLogin()) { $('#main').innerHTML = vLogin(); const pw = $('#lgPass'); if (pw) pw.onkeydown = (e) => { if (e.key === 'Enter') ACTS.lgGo(); }; return; }
-  const fn = { inicio: vInicio, productos: vProductos, proveedores: vProveedores, finanzas: vFinanzas, balance: vBalance, calendario: vCalendario, turnos: vTurnos, catering: vCatering, ajustes: vAjustes, mas: vMas }[view];
+  const fn = { inicio: vInicio, productos: vProductos, proveedores: vProveedores, finanzas: vFinanzas, balance: vBalance, calendario: vCalendario, turnos: vTurnos, catering: vCatering, ajustes: vAjustes, mas: vMas, asistente: typeof vAsistente === 'function' ? vAsistente : vInicio }[view];
   // al redibujar, la pantalla y las planillas con desplazamiento quedan donde estaban
   const scrolls = $$('#main .xls-wrap, #main .tablewrap, #main .tg-wrap, #main .locales, #main .tabs').map((el) => [el.scrollLeft, el.scrollTop]);
   const winX = window.scrollX, winY = window.scrollY, mismaVista = render._ultima === view;
@@ -305,6 +305,7 @@ function vInicio() {
   ${typeof bannerEjemplos === 'function' ? bannerEjemplos() : ''}
   ${selLocal()}
   <div class="row acciones" style="margin-bottom:16px">
+    <button class="as-ini" data-act="goto" data-id="asistente">💬 Pegar un mensaje</button>
     <button class="pri" data-act="venta">🛒 Registrar venta</button>
     <button data-act="compra">📥 Registrar compra</button>
     <button data-act="movNew" data-id="gasto">➖ Cargar gasto</button>
