@@ -63,19 +63,18 @@ function recetaDetalle(p) {
   <tr><td colspan="2"><b>Costo${Number(r.rinde) > 1 ? ` (rinde ${fmtNum(r.rinde)} porciones)` : ''}</b></td><td class="num"><b>${fmtMoney(costoDe(p))}</b> por porción</td></tr></tbody></table>`;
 }
 // Al vender algo elaborado se descuentan sus ingredientes del stock
-function descontarReceta(p, cant, fecha, nota, prof = 0) {
+function descontarReceta(p, cant, fecha, nota, prof = 0, ref = '') { // cant negativa = devolver (venta anulada)
   if (prof > 5) return;
   const r = p.receta, f = cant / (Number(r.rinde) || 1);
   for (const it of r.items) {
     const q = prod(it.pid); if (!q) continue;
-    if (esElaborado(q)) { descontarReceta(q, it.cant * f, fecha, nota, prof + 1); continue; }
-    const c = Math.round(it.cant * f * 1000) / 1000;
-    q.stock = Math.round((q.stock - c) * 1000) / 1000;
-    state.stockMovs.push({ id: uid(), fecha, productoId: q.id, tipo: 'salida', cantidad: -c, nota });
+    if (esElaborado(q)) { descontarReceta(q, it.cant * f, fecha, nota, prof + 1, ref); continue; }
+    const c = Math.round(it.cant * f * 1000) / 1000; if (!c) continue;
+    stockMov(q, -c, c > 0 ? 'salida' : 'entrada', nota, fecha, ref);
   }
 }
 
-const tabsProductos = () => `<div class="tabs"><button class="${ui.prodTab !== 'costos' ? 'on' : ''}" data-act="prodTab" data-id="lista">📦 Productos y stock</button><button class="${ui.prodTab === 'costos' ? 'on' : ''}" data-act="prodTab" data-id="costos">🧮 Costos y ganancia</button></div>`;
+const tabsProductos = () => `<div class="tabs"><button class="${!['costos', 'cambios'].includes(ui.prodTab) ? 'on' : ''}" data-act="prodTab" data-id="lista">📦 Productos y stock</button><button class="${ui.prodTab === 'costos' ? 'on' : ''}" data-act="prodTab" data-id="costos">🧮 Costos y ganancia</button><button class="${ui.prodTab === 'cambios' ? 'on' : ''}" data-act="prodTab" data-id="cambios">🕓 Historial de cambios</button></div>`;
 function vCostos() {
   const elab = prods().filter(esElaborado).sort((a, b) => margenDe(a) - margenDe(b));
   const resto = prods().filter((p) => !esElaborado(p) && p.precio > 0);
@@ -173,6 +172,7 @@ function cajaForm(c) {
     <label class="f">Pagos hechos con efectivo de la caja<input name="gastosEf" inputmode="decimal" value="${m$('gastosEf')}"></label>
     <label class="f full">Efectivo contado al cerrar *<input name="contado" inputmode="decimal" value="${m$('contado')}"></label>
   </div>
+  <div class="small muted" id="cjTk" style="margin:8px 0"></div>
   <div class="caja-res" id="cjRes"></div>
   <div class="form mt">
     <label class="f">Se deja de fondo para mañana<input name="fondoSig" inputmode="decimal" value="${m$('fondoSig')}" placeholder="Igual que hoy"></label>
@@ -183,6 +183,7 @@ function cajaForm(c) {
     const upd = () => {
       const v = vals(box), x = {}; ['fondo', 'ventas', 'tarjeta', 'bizum', 'otros', 'gastosEf', 'contado'].forEach((k) => (x[k] = numIn(v[k])));
       const esp = cajaEsperado(x), d = cajaDif(x);
+      $('#cjTk', box).innerHTML = typeof cajaTickets === 'function' ? cajaTickets(v.fecha, c.local || localActivo()) : '';
       $('#cjRes', box).innerHTML = `<div class="spread"><span>En la caja tendría que haber</span><b>${fmtMoney(esp)}</b></div><div class="small muted">Fondo + ventas − tarjeta − Bizum − otros − pagos en efectivo</div>${v.contado !== '' ? `<div class="spread mt"><span>Contaste ${fmtMoney(x.contado)}</span>${difTxt(d)}</div>` : ''}`;
     };
     box.oninput = upd; box.onchange = upd; upd();

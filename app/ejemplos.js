@@ -18,7 +18,7 @@ function cargarEjemplos() {
   // Productos al estilo di Nardi (pastelería y cafetería). Precios y costos estimados: el tío los corrige.
   const I = (nombre, unidad, costo, stock, stockMin, o = {}) => P({ nombre: nombre + EJ, categoria: 'Ingredientes', unidad, costo, stock, stockMin, ...o });
   const cafe = I('Café en grano', 'kg', 18, 6, 3, { proveedorId: pv1.id });
-  const leche = I('Leche entera', 'litros', 0.95, 20, 12, { proveedorId: pv2.id, alergenos: ['lacteos'] });
+  const leche = I('Leche entera', 'litros', 0.95, 20, 12, { proveedorId: pv2.id, alergenos: ['lacteos'], sinonimos: 'leche, brick de leche' });
   const harina = I('Harina de trigo', 'kg', 0.9, 25, 10, { alergenos: ['gluten'] });
   const manteca = I('Mantequilla', 'kg', 7.5, 4, 2, { proveedorId: pv2.id, alergenos: ['lacteos'] });
   const huevos = I('Huevos', 'unidades', 0.25, 90, 30, { alergenos: ['huevo'] });
@@ -60,6 +60,9 @@ function cargarEjemplos() {
     M({ fecha: d(-6), tipo: 'inversion', categoria: 'Mercadería', descripcion: '6 kg de café' + EJ, monto: 108, proveedorId: pv1.id, productoId: cafe.id, cantidad: 6, compra: true }),
     M({ fecha: d(-4), tipo: 'gasto', categoria: 'Servicios', descripcion: 'Luz del local' + EJ, monto: 180 }),
   );
+  // una venta con dos productos en el mismo ticket (guarda el precio y el costo de ese día)
+  const tk = id();
+  [[croissant, 2], [cl, 2]].forEach(([p, cant]) => state.movimientos.push(M({ fecha: d(-1), tipo: 'ingreso', categoria: 'Venta', descripcion: 'Venta de mostrador' + EJ, productoId: p.id, nombreProd: p.nombre, cantidad: cant, precioLista: p.precio, precioUnit: p.precio, descPct: 0, costoUnit: p.costo, monto: Math.round(cant * p.precio * 100) / 100, ticket: 'T-0000', ticketId: tk, medio: 'Tarjeta' })));
   // avisos de deudas
   state.eventos.push(
     { id: id(), tipo: 'pagar', titulo: 'Factura de leche' + EJ, persona: pv2.nombre, monto: 86, fecha: d(5), notas: 'Ejemplo de deuda a pagar: avisa antes de que venza.', hecho: false, ...E },

@@ -102,11 +102,13 @@ function asBuscarProd(nombre, lid, soloBase) {
   const tk = asToks(nombre); if (!tk.length) return null;
   let best = null, bs = 0;
   state.productos.filter((p) => localDe(p) === lid && (!soloBase || !esElaborado(p))).forEach((p) => {
-    const pt = asToks(p.nombre); if (!pt.length) return;
     const igual = (a, b) => a === b || (a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a)));
-    const inter = tk.filter((w) => pt.some((x) => igual(w, x))).length; if (!inter) return;
-    const s = 0.6 * (inter / pt.length) + 0.4 * (inter / tk.length);
-    if (s > bs) { bs = s; best = p; }
+    [p.nombre, ...String(p.sinonimos || '').split(',')].forEach((nom) => { // el nombre y sus otros nombres
+      const pt = asToks(nom); if (!pt.length) return;
+      const inter = tk.filter((w) => pt.some((x) => igual(w, x))).length; if (!inter) return;
+      const s = 0.6 * (inter / pt.length) + 0.4 * (inter / tk.length);
+      if (s > bs) { bs = s; best = p; }
+    });
   });
   return bs >= 0.5 ? best : null;
 }
@@ -213,34 +215,34 @@ function asCatering(lineas, t, quien) {
 }
 
 // ---------- Guardar ----------
+// Si el mensaje nombraba el producto de otra forma y se eligió a mano, se guarda como "otro nombre" para la próxima vez
+function asAprender(p, nombre, lid) {
+  const n = String(nombre || '').trim(); if (!p || n.length < 3 || asN(n) === asN(p.nombre)) return;
+  const ya = String(p.sinonimos || '').split(',').map((x) => asN(x)).filter(Boolean);
+  if (ya.includes(asN(n)) || asBuscarProd(n, lid, false) === p) return;
+  p.sinonimos = [p.sinonimos, n].filter(Boolean).join(', ');
+}
 function asAplicar(a) {
   if (a.tipo === 'mercaderia') {
     const pv = prov(a.proveedorId), filas = a.items.filter((f) => f.cant > 0 && (f.pid !== 'nuevo' || f.nombre.trim()));
     if (!filas.length) return toast('No hay productos para anotar'), null;
-    const nombres = [];
+    const nombres = [], lineas = [];
     filas.forEach((f) => {
       let p = f.pid !== 'nuevo' && prod(f.pid);
       if (!p) { p = { id: uid(), creado: new Date().toISOString(), nombre: asCap(f.nombre), categoria: 'Ingredientes', codigo: '', unidad: { kg: 'kg', g: 'kg', l: 'litros', ml: 'litros' }[f.uni] || 'unidades', costo: 0, precio: 0, stock: 0, stockMin: 0, proveedorId: a.proveedorId || '', campos: [], notas: 'Creado desde el Asistente', foto: '', local: a.local }; if (f.uni === 'g' || f.uni === 'ml') f.cant = f.cant / 1000; state.productos.push(p); }
-      p.stock = Math.round(((Number(p.stock) || 0) + f.cant) * 1000) / 1000;
-      if (f.tot > 0) p.costo = Math.round((f.tot / f.cant) * 10000) / 10000;
-      if (a.proveedorId && !p.proveedorId) p.proveedorId = a.proveedorId;
-      state.stockMovs.push({ id: uid(), fecha: a.fecha, productoId: p.id, tipo: 'entrada', cantidad: f.cant, nota: [pv && pv.nombre, 'Asistente'].filter(Boolean).join(' · ') });
+      else asAprender(p, f.nombre, a.local);
+      lineas.push({ pid: p.id, cant: f.cant, costo: f.tot > 0 ? Math.round((f.tot / f.cant) * 10000) / 10000 : 0 });
       nombres.push(`${fmtNum(f.cant)} ${p.unidad || ''} ${p.nombre}`.replace(/\s+/g, ' '));
     });
-    const total = a.total || filas.reduce((s, f) => s + (f.tot || 0), 0), desc = 'Mercadería: ' + nombres.join(', ');
-    if (total > 0 && a.pago === 'debo') state.eventos.push({ id: uid(), tipo: 'pagar', titulo: 'Pagar mercadería' + (pv ? ' · ' + pv.nombre : ''), persona: pv ? pv.nombre : '', monto: total, fecha: a.fechaPago, notas: desc, hecho: false, mov: { tipo: 'inversion', categoria: 'Mercadería', proveedorId: a.proveedorId } });
-    else if (total > 0 && a.pago === 'pagado') state.movimientos.push({ id: uid(), creado: new Date().toISOString(), fecha: a.fecha, tipo: 'inversion', categoria: 'Mercadería', descripcion: desc, monto: total, proveedorId: a.proveedorId, local: a.local });
-    return { txt: `Anoté la mercadería: ${nombres.join(', ')}${total > 0 ? ` · ${fmtMoney(total)} ${a.pago === 'debo' ? 'a pagar el ' + fmtDate(a.fechaPago) : a.pago === 'pagado' ? 'como inversión' : ''}` : ''}.`, ir: 'productos' };
+    const total = a.total || filas.reduce((s, f) => s + (f.tot || 0), 0);
+    const res = registrarCompra({ fecha: a.fecha, proveedorId: a.proveedorId || '', lineas, pago: total > 0 ? a.pago : 'no', fechaPago: a.fechaPago, nota: 'Asistente: ' + nombres.join(', '), total });
+    return { txt: `Anoté la mercadería (${res.nro}): ${nombres.join(', ')}${total > 0 ? ` · ${fmtMoney(total)} ${a.pago === 'debo' ? 'a pagar el ' + fmtDate(a.fechaPago) : a.pago === 'pagado' ? 'como inversión' : ''}` : ''}.`, ir: 'productos' };
   }
   if (a.tipo === 'venta') {
     const filas = a.items.filter((f) => prod(f.pid) && f.cant > 0); if (!filas.length) return toast('Elegí qué producto se vendió'), null;
-    filas.forEach((f) => {
-      const p = prod(f.pid);
-      if (esElaborado(p)) descontarReceta(p, f.cant, a.fecha, 'Venta de ' + p.nombre);
-      else { p.stock -= f.cant; state.stockMovs.push({ id: uid(), fecha: a.fecha, productoId: p.id, tipo: 'salida', cantidad: -f.cant, nota: 'Venta (Asistente)' }); }
-      state.movimientos.push({ id: uid(), creado: new Date().toISOString(), fecha: a.fecha, tipo: 'ingreso', categoria: 'Venta', descripcion: 'Asistente', monto: f.tot || 0, productoId: p.id, cantidad: f.cant, costoUnit: costoDe(p), local: localDe(p) });
-    });
-    return { txt: `Anoté la venta de ${filas.map((f) => `${fmtNum(f.cant)} × ${prod(f.pid).nombre}`).join(', ')}.`, ir: 'finanzas' };
+    filas.forEach((f) => asAprender(prod(f.pid), f.nombre, a.local));
+    const res = registrarVenta({ fecha: a.fecha, lineas: filas.map((f) => ({ pid: f.pid, cant: f.cant, precio: (f.tot || 0) / f.cant })), nota: 'Asistente' });
+    return { txt: `Anoté la venta ${res.nro} de ${filas.map((f) => `${fmtNum(f.cant)} × ${prod(f.pid).nombre}`).join(', ')}.`, ir: 'finanzas' };
   }
   if (a.tipo === 'mov') {
     if (!(a.monto > 0)) return toast('Poné el monto'), null;

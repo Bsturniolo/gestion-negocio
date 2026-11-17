@@ -58,7 +58,7 @@ const TIPOS_EV = {
 const EMPTY = () => ({
   version: 1,
   config: { negocio: 'Mi Negocio', moneda: '$', avisoDias: 3, ultimoRespaldo: null, turnos: { inicio: 6, fin: 22, intervalo: 60 } },
-  productos: [], proveedores: [], movimientos: [], stockMovs: [], eventos: [], personal: [], turnos: [], caterings: [], cierres: [],
+  productos: [], proveedores: [], movimientos: [], stockMovs: [], eventos: [], personal: [], turnos: [], caterings: [], cierres: [], auditoria: [],
 });
 let state = EMPTY();
 
@@ -97,7 +97,7 @@ const prod = (id) => state.productos.find((p) => p.id === id);
 
 // ---------- Nube (Firebase) ----------
 const cloud = { cfg: null, uid: null, email: '', live: false, synced: {}, buffer: {}, reported: new Set(), unsub: null, pending: false, error: '', deferred: {} };
-const COLS = ['productos', 'proveedores', 'movimientos', 'stockMovs', 'eventos', 'personal', 'turnos', 'caterings', 'cierres'];
+const COLS = ['productos', 'proveedores', 'movimientos', 'stockMovs', 'eventos', 'personal', 'turnos', 'caterings', 'cierres', 'auditoria'];
 function stable(v) { // JSON con claves ordenadas, para comparar registros
   if (Array.isArray(v)) return '[' + v.map(stable).join(',') + ']';
   if (v && typeof v === 'object') return '{' + Object.keys(v).filter((k) => v[k] !== undefined).sort().map((k) => JSON.stringify(k) + ':' + stable(v[k])).join(',') + '}';
@@ -339,15 +339,16 @@ const byFechaDesc = (a, b) => (b.fecha + (b.creado || '')).localeCompare(a.fecha
 // Productos
 function vProductos() {
   if (ui.prodTab === 'costos' && typeof vCostos === 'function') return vCostos();
+  if (ui.prodTab === 'cambios' && typeof vCambios === 'function') return vCambios();
   const cats = [...new Set(prods().map((p) => p.categoria).filter(Boolean))].sort();
   const q = ui.prodQ.toLowerCase();
-  const list = prods().filter((p) => (!ui.prodCat || p.categoria === ui.prodCat) && (!q || [p.nombre, p.categoria, p.codigo, (prov(p.proveedorId) || {}).nombre].join(' ').toLowerCase().includes(q))).sort((a, b) => a.nombre.localeCompare(b.nombre));
+  const list = prods().filter((p) => (!ui.prodCat || p.categoria === ui.prodCat) && (!q || [p.nombre, p.categoria, p.codigo, p.sinonimos, (prov(p.proveedorId) || {}).nombre].join(' ').toLowerCase().includes(q))).sort((a, b) => a.nombre.localeCompare(b.nombre));
   return `
   <div class="spread"><div><h1>Productos y stock</h1><p class="sub">${prods().length} productos · valor del stock: <b>${fmtMoney(valorStock())}</b></p></div>
   <div class="row"><button data-act="compra">📥 Entrada de stock</button><button data-act="venta">🛒 Venta</button><button class="pri" data-act="prodNew">➕ Nuevo producto</button></div></div>
   ${selLocal()}
   ${typeof tabsProductos === 'function' ? tabsProductos() : ''}
-  <div class="row" style="margin-bottom:14px"><input type="search" class="search" placeholder="Buscar producto, código o proveedor…" data-bind="prodQ" value="${esc(ui.prodQ)}">
+  <div class="row" style="margin-bottom:14px"><input type="search" class="search" placeholder="Buscar por nombre, código, otro nombre o proveedor…" data-bind="prodQ" value="${esc(ui.prodQ)}">
   <select data-bind="prodCat" style="width:auto"><option value="">Todas las categorías</option>${cats.map((c) => `<option ${c === ui.prodCat ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
   ${list.length ? `<div class="grid prods">${list.map((p) => {
     const bajo = p.stockMin > 0 && p.stock <= p.stockMin;
@@ -363,10 +364,10 @@ function vProveedores() {
   const list = state.proveedores.filter((p) => !q || [p.nombre, p.contacto, p.rubro, p.telefono].join(' ').toLowerCase().includes(q)).sort((a, b) => a.nombre.localeCompare(b.nombre));
   const tot = (id) => state.movimientos.filter((m) => m.proveedorId === id && m.tipo !== 'ingreso').reduce((s, m) => s + m.monto, 0);
   return `
-  <div class="spread"><div><h1>Proveedores</h1><p class="sub">Contactos y cuánto le compraste a cada uno.</p></div><button class="pri" data-act="provNew">➕ Nuevo proveedor</button></div>
+  <div class="spread"><div><h1>Proveedores</h1><p class="sub">Contactos, cuánto le compraste a cada uno y cuánto le debés.</p></div><button class="pri" data-act="provNew">➕ Nuevo proveedor</button></div>
   <div class="row" style="margin-bottom:14px"><input type="search" class="search" placeholder="Buscar proveedor…" data-bind="provQ" value="${esc(ui.provQ)}"></div>
-  ${list.length ? `<div class="tablewrap"><table><thead><tr><th>Proveedor</th><th class="hide-m">Rubro</th><th class="hide-m">Contacto</th><th class="num">Total comprado</th><th class="num hide-m">Productos</th><th></th></tr></thead><tbody>
-  ${list.map((p) => `<tr><td><a href="#" data-act="provView" data-id="${p.id}"><b>${esc(p.nombre)}</b></a></td><td class="hide-m">${esc(p.rubro)}</td><td class="hide-m">${esc([p.contacto, p.telefono].filter(Boolean).join(' · '))}</td><td class="num c-inv">${fmtMoney(tot(p.id))}</td><td class="num hide-m">${state.productos.filter((x) => x.proveedorId === p.id).length}</td><td class="right"><button class="sm" data-act="provView" data-id="${p.id}">Ver</button></td></tr>`).join('')}
+  ${list.length ? `<div class="tablewrap"><table><thead><tr><th>Proveedor</th><th class="hide-m">Rubro</th><th class="hide-m">Contacto</th><th class="num hide-m">Total comprado</th><th class="num">Le debés</th><th class="num hide-m">Productos</th><th></th></tr></thead><tbody>
+  ${list.map((p) => `<tr><td><a href="#" data-act="provView" data-id="${p.id}"><b>${esc(p.nombre)}</b></a></td><td class="hide-m">${esc(p.rubro)}</td><td class="hide-m">${esc([p.contacto, p.telefono].filter(Boolean).join(' · '))}</td><td class="num c-inv hide-m">${fmtMoney(tot(p.id))}</td><td class="num ${deudaProv(p) ? 'c-out' : 'muted'}">${deudaProv(p) ? `<b>${fmtMoney(deudaProv(p))}</b>` : '—'}</td><td class="num hide-m">${state.productos.filter((x) => x.proveedorId === p.id).length}</td><td class="right"><button class="sm" data-act="provView" data-id="${p.id}">Ver</button></td></tr>`).join('')}
   </tbody></table></div>` : `<div class="card empty">${state.proveedores.length ? 'Sin resultados.' : 'Todavía no cargaste proveedores.'}</div>`}`;
 }
 
@@ -376,8 +377,10 @@ function movTable(list, compact) {
   return `<div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Detalle</th>${compact ? '' : '<th class="hide-m">Proveedor</th>'}<th class="num">Monto</th><th></th></tr></thead><tbody>
   ${list.map((m) => {
     const t = TIPOS_MOV[m.tipo];
-    const det = [m.categoria, m.descripcion, m.productoId && prod(m.productoId) ? `${fmtNum(m.cantidad)} × ${prod(m.productoId).nombre}` : ''].filter(Boolean).join(' · ');
-    return `<tr><td>${fmtDate(m.fecha)}</td><td><span class="badge ${t.cls}">${t.lbl}</span></td><td>${esc(det)}</td>${compact ? '' : `<td class="hide-m">${esc((prov(m.proveedorId) || {}).nombre || '')}</td>`}<td class="num c-${t.cls}"><b>${m.tipo === 'ingreso' ? '+' : '−'}${fmtMoney(m.monto)}</b></td><td class="right"><button class="sm" data-act="movEdit" data-id="${m.id}">Editar</button></td></tr>`;
+    const pn = m.productoId ? m.nombreProd || (prod(m.productoId) || {}).nombre || '' : '';
+    const det = [m.categoria, m.descripcion, pn ? `${fmtNum(m.cantidad)} × ${pn}` : ''].filter(Boolean).join(' · ');
+    const comp = m.ticketId ? `<a href="#" class="comp" data-act="ticketVer" data-id="${m.ticketId}">🧾 ${esc(m.ticket || 'Ticket')}</a> ` : m.compraNro ? `<span class="comp">${esc(m.compraNro)}</span> ` : '';
+    return `<tr><td>${fmtDate(m.fecha)}</td><td><span class="badge ${t.cls}">${t.lbl}</span></td><td>${comp}${esc(det)}</td>${compact ? '' : `<td class="hide-m">${esc((prov(m.proveedorId) || {}).nombre || '')}</td>`}<td class="num c-${t.cls}"><b>${m.tipo === 'ingreso' ? '+' : '−'}${fmtMoney(m.monto)}</b></td><td class="right"><button class="sm" data-act="movEdit" data-id="${m.id}">Editar</button></td></tr>`;
   }).join('')}</tbody></table></div>`;
 }
 function vFinanzas() {
@@ -500,6 +503,7 @@ function vAjustes() {
   <div class="card"><div class="form">
     <label class="f full">Nombre del negocio<input id="cfgNeg" value="${esc(c.negocio)}"></label>
     <label class="f full">Tu nombre (para el saludo de Inicio)<input id="cfgSaludo" value="${esc(c.saludo || '')}" placeholder="Ej: Paulo Nardi"></label>
+    <label class="f full">¿Quién usa este dispositivo? (queda anotado en el historial de cambios)<input id="cfgQuien" value="${esc(typeof quienGuardado === 'function' ? quienGuardado() : '')}" placeholder="Ej: Paulo, Laura, Caja de Triana"></label>
     <label class="f">Símbolo de moneda<input id="cfgMon" value="${esc(c.moneda)}"></label>
     <label class="f">Avisar deudas con cuántos días de anticipación<input id="cfgDias" type="number" min="0" value="${c.avisoDias}"></label>
   </div><div class="modal-actions"><button class="pri" data-act="cfgSave">Guardar</button></div></div>
@@ -570,6 +574,7 @@ function prodForm(p) {
     ${isNew ? localSelect() : ''}
     <label class="f">Categoría<input name="categoria" list="catList" value="${esc(p.categoria)}" placeholder="Ej: Bebidas"><datalist id="catList">${cats.map((c) => `<option value="${esc(c)}">`).join('')}</datalist></label>
     <label class="f">Código / SKU<input name="codigo" value="${esc(p.codigo)}"></label>
+    <label class="f full">Otros nombres o códigos, separados por coma (para buscarlo, escanearlo y que el Asistente lo reconozca)<input name="sinonimos" value="${esc(p.sinonimos || '')}" placeholder="Ej: leche, brick entera, 8410128000011"></label>
     <label class="f">Precio de costo (lo que pagás)<input name="costo" inputmode="decimal" value="${p.costo || ''}"></label>
     <label class="f">Precio de venta<input name="precio" inputmode="decimal" value="${p.precio || ''}"></label>
     ${isNew ? `<label class="f">Stock inicial<input name="stock" inputmode="decimal" value=""></label>` : `<label class="f">Stock actual<input value="${fmtNum(p.stock)}" disabled title="Usá Entrada / Venta / Ajuste para cambiarlo"></label>`}
@@ -587,16 +592,21 @@ function prodForm(p) {
     $('#addCampo', box).onclick = () => $('#campos', box).insertAdjacentHTML('beforeend', campoRow({ k: '', v: '' }));
     recetaBind(box, p);
     $('#campos', box).onclick = (e) => { if (e.target.dataset.rm) e.target.closest('.extra').remove(); };
-    if (!isNew) $('#pDel', box).onclick = () => confirmBox(`Se va a eliminar <b>${esc(p.nombre)}</b>. Los movimientos de dinero ya cargados se mantienen.`, () => { state.productos = state.productos.filter((x) => x.id !== p.id); commit(); toast('Producto eliminado'); }, 'Eliminar');
+    if (!isNew) $('#pDel', box).onclick = () => confirmBox(`Se va a eliminar <b>${esc(p.nombre)}</b>. Los movimientos de dinero ya cargados se mantienen.`, () => { audit('Producto eliminado', p.nombre, `Stock ${fmtNum(p.stock)} ${p.unidad || ''}`.trim(), 'eliminado'); state.productos = state.productos.filter((x) => x.id !== p.id); commit(); toast('Producto eliminado'); }, 'Eliminar');
     $('#pSave', box).onclick = () => {
       const v = vals(box); if (!v.nombre) return toast('Poné un nombre al producto');
       const campos = $$('.extra', box).map((r) => ({ k: $('.ck', r).value.trim(), v: $('.cv', r).value.trim() })).filter((c) => c.k || c.v);
       const receta = recetaLeer(box);
-      const data = { nombre: v.nombre, categoria: v.categoria, codigo: v.codigo, unidad: v.unidad, costo: receta ? costoReceta(receta) : numIn(v.costo), precio: numIn(v.precio), stockMin: numIn(v.stockMin), proveedorId: v.proveedorId, notas: v.notas, campos, foto, receta: receta || null, alergenos: alergLeer(box) };
+      const data = { nombre: v.nombre, categoria: v.categoria, codigo: v.codigo, unidad: v.unidad, costo: receta ? costoReceta(receta) : numIn(v.costo), precio: numIn(v.precio), stockMin: numIn(v.stockMin), proveedorId: v.proveedorId, notas: v.notas, campos, foto, receta: receta || null, alergenos: alergLeer(box), sinonimos: (v.sinonimos || '').split(',').map((x) => x.trim()).filter(Boolean).join(', ') };
       if (isNew) {
-        const np = { id: uid(), creado: new Date().toISOString(), stock: numIn(v.stock), local: v.local || localActivo(), ...data }; state.productos.push(np);
-        if (np.stock) state.stockMovs.push({ id: uid(), fecha: todayStr(), productoId: np.id, tipo: 'ajuste', cantidad: np.stock, nota: 'Stock inicial' });
-      } else Object.assign(p, data);
+        const np = { id: uid(), creado: new Date().toISOString(), stock: 0, local: v.local || localActivo(), ...data }; state.productos.push(np);
+        if (numIn(v.stock)) stockMov(np, numIn(v.stock), 'ajuste', 'Stock inicial');
+      } else {
+        if (r2(data.precio) !== r2(p.precio)) audit('Precio de venta', p.nombre, fmtMoney(p.precio || 0), fmtMoney(data.precio));
+        if (!receta && !p.receta && r2(data.costo) !== r2(p.costo)) audit('Costo', p.nombre, fmtMoney(p.costo || 0), fmtMoney(data.costo));
+        if (data.nombre !== p.nombre) audit('Nombre del producto', data.nombre, p.nombre, data.nombre);
+        Object.assign(p, data);
+      }
       closeModal(); commit(); toast('Producto guardado ✔');
     };
   });
@@ -605,7 +615,6 @@ const campoRow = (c) => `<div class="extra"><input class="ck" placeholder="Dato 
 
 function prodView(id) {
   const p = prod(id); if (!p) return;
-  const movs = state.stockMovs.filter((m) => m.productoId === id).sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 15);
   const vendidos = state.movimientos.filter((m) => m.productoId === id && m.tipo === 'ingreso');
   const uVend = vendidos.reduce((s, m) => s + (m.cantidad || 0), 0), $vend = vendidos.reduce((s, m) => s + m.monto, 0);
   const costo = costoDe(p), margen = p.precio > 0 ? ((p.precio - costo) / p.precio) * 100 : 0;
@@ -617,95 +626,28 @@ function prodView(id) {
   <table class="mt small"><tbody>
     <tr><td class="muted">Categoría</td><td>${esc(p.categoria || '—')}</td></tr>
     ${p.codigo ? `<tr><td class="muted">Código</td><td>${esc(p.codigo)}</td></tr>` : ''}
+    ${p.sinonimos ? `<tr><td class="muted">Otros nombres</td><td>${esc(p.sinonimos)}</td></tr>` : ''}
     <tr><td class="muted">Proveedor</td><td>${esc((prov(p.proveedorId) || {}).nombre || '—')}</td></tr>
     ${(p.campos || []).map((c) => `<tr><td class="muted">${esc(c.k)}</td><td>${esc(c.v)}</td></tr>`).join('')}
     ${p.notas ? `<tr><td class="muted">Notas</td><td>${esc(p.notas)}</td></tr>` : ''}
   </tbody></table>
   <div class="row mt"><button class="pri" data-act="venta" data-id="${p.id}">🛒 Venta</button><button data-act="compra" data-id="${p.id}">📥 Entrada / compra</button><button data-act="ajuste" data-id="${p.id}">✏️ Ajustar stock</button><button data-act="prodEdit" data-id="${p.id}">Editar producto</button></div>
-  <h2>Historial de stock</h2>
-  ${movs.length ? `<table class="small"><tbody>${movs.map((m) => `<tr><td>${fmtDate(m.fecha)}</td><td><span class="badge ${m.tipo === 'entrada' ? 'in' : m.tipo === 'salida' ? 'out' : 'gray'}">${{ entrada: 'Entrada', salida: 'Venta', ajuste: 'Ajuste' }[m.tipo]}</span></td><td class="num">${m.cantidad > 0 ? '+' : ''}${fmtNum(m.cantidad)}</td><td class="muted">${esc(m.nota || '')}</td></tr>`).join('')}</tbody></table>` : '<p class="muted small">Sin movimientos todavía.</p>'}`);
+  ${esElaborado(p) && !state.stockMovs.some((m) => m.productoId === id) ? '' : `<h2>Ficha de stock</h2>${kardexHTML(p, 12)}`}`);
 }
 
-// Venta
-function ventaForm(prodId) {
-  if (!prods().length) return alertBox(typeof verTodos === 'function' && verTodos() ? 'Elegí un local arriba para registrar ventas o compras.' : 'Primero cargá al menos un producto en este local.');
-  openModal(`<h3>🛒 Registrar venta</h3><div class="form">
-    <label class="f full">Producto *<select name="productoId" id="vProd">${prodOptions(prodId)}</select></label>
-    <label class="f">Cantidad *<input name="cantidad" id="vCant" inputmode="decimal" value="1"></label>
-    <label class="f">Precio unitario<input name="precio" id="vPre" inputmode="decimal"></label>
-    <label class="f">Fecha<input type="date" name="fecha" value="${todayStr()}"></label>
-    <label class="f">Total cobrado<input name="total" id="vTot" inputmode="decimal"></label>
-    <label class="f full">Nota (opcional)<input name="descripcion" placeholder="Ej: cliente, forma de pago…"></label>
-    <label class="f full" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" name="fiado" id="vFiado" style="width:auto"> <span>Lo dejó fiado (crear aviso "a cobrar" en el calendario)</span></label>
-    <label class="f full hidden" id="vFiadoBox" style="display:none">Fecha en que te paga<input type="date" name="fechaCobro" value="${addMonths(todayStr(), 1)}"></label>
-  </div><p class="small muted" id="vInfo"></p>
-  <div class="modal-actions"><button data-act="close">Cancelar</button><button class="pri" id="vOk">Registrar venta</button></div>`, (box) => {
-    const upd = (fromTotal) => {
-      const p = prod($('#vProd', box).value); const c = numIn($('#vCant', box).value);
-      if (!fromTotal) $('#vTot', box).value = c * numIn($('#vPre', box).value) || '';
-      $('#vInfo', box).textContent = p ? `Stock disponible: ${fmtNum(p.stock)} ${p.unidad || ''}${p.stock - c < 0 ? ' ⚠️ quedaría en negativo' : ''}` : '';
-    };
-    $('#vProd', box).onchange = () => { const p = prod($('#vProd', box).value); $('#vPre', box).value = p ? p.precio : ''; upd(); };
-    $('#vCant', box).oninput = () => upd(); $('#vPre', box).oninput = () => upd(); $('#vTot', box).oninput = () => upd(true);
-    $('#vFiado', box).onchange = (e) => ($('#vFiadoBox', box).style.display = e.target.checked ? 'flex' : 'none');
-    if (prodId) $('#vProd', box).onchange();
-    $('#vOk', box).onclick = () => {
-      const v = vals(box), p = prod(v.productoId), cant = numIn(v.cantidad), total = numIn(v.total);
-      if (!p) return toast('Elegí un producto'); if (cant <= 0) return toast('La cantidad tiene que ser mayor a 0');
-      if (esElaborado(p)) descontarReceta(p, cant, v.fecha, v.descripcion || 'Venta de ' + p.nombre);
-      else { p.stock -= cant; state.stockMovs.push({ id: uid(), fecha: v.fecha, productoId: p.id, tipo: 'salida', cantidad: -cant, nota: v.descripcion || 'Venta' }); }
-      if (v.fiado) {
-        state.eventos.push({ id: uid(), tipo: 'cobrar', titulo: `Venta fiada: ${cant} × ${p.nombre}`, persona: v.descripcion, monto: total, fecha: v.fechaCobro || todayStr(), notas: '', hecho: false, venta: { productoId: p.id, cantidad: cant, costoUnit: costoDe(p), fechaVenta: v.fecha } });
-        closeModal(); commit(); toast('Venta fiada registrada. Cuando te pague, marcala como resuelta en el calendario.');
-      } else {
-        state.movimientos.push({ id: uid(), creado: new Date().toISOString(), fecha: v.fecha, tipo: 'ingreso', categoria: 'Venta', descripcion: v.descripcion, monto: total, productoId: p.id, cantidad: cant, costoUnit: costoDe(p), local: localDe(p) });
-        closeModal(); commit(); toast('Venta registrada ✔');
-      }
-    };
-  });
-}
-
-// Compra / entrada de stock
-function compraForm(prodId) {
-  if (!prods().length) return alertBox(typeof verTodos === 'function' && verTodos() ? 'Elegí un local arriba para registrar ventas o compras.' : 'Primero cargá al menos un producto en este local.');
-  const p0 = prod(prodId);
-  openModal(`<h3>📥 Entrada de mercadería</h3><div class="form">
-    <label class="f full">Producto *<select name="productoId" id="cProd">${prodOptions(prodId)}</select></label>
-    <label class="f">Cantidad *<input name="cantidad" id="cCant" inputmode="decimal" value=""></label>
-    <label class="f">Costo unitario<input name="costo" id="cCos" inputmode="decimal" value="${p0 ? p0.costo || '' : ''}"></label>
-    <label class="f">Proveedor<select name="proveedorId" id="cProv">${provOptions(p0 ? p0.proveedorId : '')}</select></label>
-    <label class="f">Fecha<input type="date" name="fecha" value="${todayStr()}"></label>
-    <label class="f">Total pagado<input name="total" id="cTot" inputmode="decimal"></label>
-    <label class="f full" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" name="registrar" checked style="width:auto"> <span>Registrar el pago como <b>inversión</b> en el balance</span></label>
-    <label class="f full" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" name="actCosto" checked style="width:auto"> <span>Actualizar el precio de costo del producto</span></label>
-    <label class="f full" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" name="debo" id="cDebo" style="width:auto"> <span>Lo pago más adelante (crear aviso "a pagar")</span></label>
-    <label class="f full" id="cDeboBox" style="display:none">Fecha de pago<input type="date" name="fechaPago" value="${addMonths(todayStr(), 1)}"></label>
-    <label class="f full">Nota (opcional)<input name="descripcion" placeholder="Ej: N° de factura"></label>
-  </div><div class="modal-actions"><button data-act="close">Cancelar</button><button class="pri" id="cOk">Registrar entrada</button></div>`, (box) => {
-    const upd = () => ($('#cTot', box).value = numIn($('#cCant', box).value) * numIn($('#cCos', box).value) || '');
-    $('#cProd', box).onchange = () => { const p = prod($('#cProd', box).value); if (p) { $('#cCos', box).value = p.costo || ''; if (p.proveedorId) $('#cProv', box).value = p.proveedorId; } upd(); };
-    $('#cCant', box).oninput = upd; $('#cCos', box).oninput = upd;
-    $('#cDebo', box).onchange = (e) => ($('#cDeboBox', box).style.display = e.target.checked ? 'flex' : 'none');
-    $('#cOk', box).onclick = () => {
-      const v = vals(box), p = prod(v.productoId), cant = numIn(v.cantidad), total = numIn(v.total);
-      if (!p) return toast('Elegí un producto'); if (cant <= 0) return toast('Poné la cantidad');
-      p.stock += cant; if (v.actCosto && numIn(v.costo)) p.costo = numIn(v.costo); if (v.proveedorId && !p.proveedorId) p.proveedorId = v.proveedorId;
-      state.stockMovs.push({ id: uid(), fecha: v.fecha, productoId: p.id, tipo: 'entrada', cantidad: cant, nota: [(prov(v.proveedorId) || {}).nombre, v.descripcion].filter(Boolean).join(' · ') || 'Compra' });
-      if (v.debo) state.eventos.push({ id: uid(), tipo: 'pagar', titulo: `Pagar compra: ${cant} × ${p.nombre}`, persona: (prov(v.proveedorId) || {}).nombre || '', monto: total, fecha: v.fechaPago, notas: v.descripcion, hecho: false, mov: v.registrar && total ? { tipo: 'inversion', categoria: 'Mercadería', proveedorId: v.proveedorId, productoId: p.id, cantidad: cant } : null });
-      else if (v.registrar && total) state.movimientos.push({ id: uid(), creado: new Date().toISOString(), fecha: v.fecha, tipo: 'inversion', categoria: 'Mercadería', descripcion: v.descripcion, monto: total, proveedorId: v.proveedorId, productoId: p.id, cantidad: cant, compra: true, local: localDe(p) });
-      closeModal(); commit(); toast('Entrada registrada ✔');
-    };
-    if (prodId) upd();
-  });
-}
+// La venta y la entrada de mercadería (con varios productos) están en ventas.js
 
 function ajusteForm(prodId) {
   const p = prod(prodId); if (!p) return;
-  openModal(`<h3>✏️ Ajustar stock: ${esc(p.nombre)}</h3><p class="small muted">Para corregir el stock (conteo, rotura, pérdida, etc). No afecta el dinero.</p><div class="form">
+  openModal(`<h3>✏️ Ajustar stock: ${esc(p.nombre)}</h3><p class="small muted">Para corregir el stock (conteo, rotura, pérdida, etc). No afecta el dinero. Queda anotado en la ficha de stock y en el historial de cambios.</p><div class="form">
     <label class="f">Stock real ahora<input name="real" inputmode="decimal" value="${p.stock}"></label>
     <label class="f">Motivo<input name="nota" placeholder="Ej: conteo, se rompió…"></label></div>
     <div class="modal-actions"><button data-act="close">Cancelar</button><button class="pri" id="aOk">Guardar</button></div>`, (box) => {
-    $('#aOk', box).onclick = () => { const v = vals(box), real = numIn(v.real), dif = real - p.stock; if (dif) { state.stockMovs.push({ id: uid(), fecha: todayStr(), productoId: p.id, tipo: 'ajuste', cantidad: dif, nota: v.nota || 'Ajuste' }); p.stock = real; } closeModal(); commit(); toast('Stock actualizado'); };
+    $('#aOk', box).onclick = () => {
+      const v = vals(box), antes = Number(p.stock) || 0, dif = r3(numIn(v.real) - antes), u = p.unidad ? ' ' + p.unidad : '';
+      if (dif) { stockMov(p, dif, 'ajuste', v.nota || 'Ajuste a mano'); audit('Stock (ajuste a mano)', p.nombre, fmtNum(antes) + u, fmtNum(p.stock) + u, v.nota); }
+      closeModal(); commit(); toast('Stock actualizado');
+    };
   });
 }
 
@@ -732,15 +674,16 @@ function provView(id) {
   const tot = movs.filter((m) => m.tipo !== 'ingreso').reduce((s, m) => s + m.monto, 0);
   const anio = String(new Date().getFullYear()), totA = movs.filter((m) => m.tipo !== 'ingreso' && m.fecha.startsWith(anio)).reduce((s, m) => s + m.monto, 0);
   const prods = state.productos.filter((x) => x.proveedorId === id);
-  const deuda = state.eventos.filter((e) => !e.hecho && e.tipo === 'pagar' && e.persona === p.nombre).reduce((s, e) => s + (e.monto || 0), 0);
+  const deuda = deudaProv(p);
   const tel = (p.telefono || '').replace(/[^\d]/g, '');
   openModal(`<div class="spread"><h3 style="margin:0">🚚 ${esc(p.nombre)}</h3><button class="sm" data-act="close">✕</button></div>
   <p class="small muted">${[p.rubro, p.contacto, p.telefono, p.email, p.direccion, p.cuit && 'CUIT ' + p.cuit].filter(Boolean).map(esc).join(' · ')}</p>
   ${p.notas ? `<p class="small">${esc(p.notas)}</p>` : ''}
   <div class="grid kpis">${kpi('Total comprado', fmtMoney(tot), 'c-inv')}${kpi('Comprado en ' + anio, fmtMoney(totA), 'c-inv')}${kpi('Le debés', fmtMoney(deuda), deuda ? 'c-out' : '')}</div>
-  <div class="row mt">${tel ? `<a class="btn" href="https://wa.me/${tel}" target="_blank">💬 WhatsApp</a>` : ''}<button data-act="provEdit" data-id="${p.id}">Editar</button><button data-act="movNewProv" data-id="${p.id}">📈 Cargar pago / inversión</button></div>
+  <div class="row mt">${tel ? `<a class="btn" href="https://wa.me/${tel}" target="_blank">💬 WhatsApp</a>` : ''}<button data-act="provEdit" data-id="${p.id}">Editar</button><button data-act="compraProv" data-id="${p.id}">📥 Cargar compra</button><button data-act="movNewProv" data-id="${p.id}">📈 Cargar pago / inversión</button></div>
+  <h2>Lo que le debés</h2>${cuentaProvHTML(p)}
   <h2>Productos (${prods.length})</h2>${prods.length ? `<p class="small">${prods.map((x) => esc(x.nombre)).join(', ')}</p>` : '<p class="small muted">Ninguno asignado.</p>'}
-  <h2>Compras y pagos</h2>${movTable(movs.slice(0, 20), true)}`);
+  <h2>Compras y pagos hechos</h2>${movTable(movs.slice(0, 20), true)}`, (box) => box.classList.add('modal-ancho'));
 }
 
 // Movimiento de dinero
@@ -758,11 +701,12 @@ function movForm(m, tipo, extra = {}) {
     ${m.productoId ? `<p class="full small muted">Vinculado a ${fmtNum(m.cantidad)} × ${esc((prod(m.productoId) || {}).nombre || 'producto eliminado')}. Editar este movimiento no cambia el stock.</p>` : ''}
   </div><div class="modal-actions">${isNew ? '' : '<button class="danger" id="mDel">Eliminar</button>'}<button data-act="close">Cancelar</button><button class="pri" id="mOk">Guardar</button></div>`, (box) => {
     $('#mTipo', box).onchange = (e) => { $('#mCats', box).innerHTML = catOpts(e.target.value); $('#mCat', box).value = CATS[e.target.value][0]; };
-    if (!isNew) $('#mDel', box).onclick = () => confirmBox(`Se va a eliminar este movimiento de ${fmtMoney(m.monto)}.${m.productoId ? '<br><span class="small">El stock no se modifica: si hace falta, ajustalo desde el producto.</span>' : ''}`, () => { state.movimientos = state.movimientos.filter((x) => x.id !== m.id); commit(); toast('Movimiento eliminado'); }, 'Eliminar');
+    if (!isNew) $('#mDel', box).onclick = () => confirmBox(`Se va a eliminar este movimiento de ${fmtMoney(m.monto)}.${m.productoId ? '<br><span class="small">El stock no se modifica: si hace falta, ajustalo desde el producto.</span>' : ''}`, () => { audit('Movimiento eliminado', [TIPOS_MOV[m.tipo].lbl, m.categoria, m.ticket].filter(Boolean).join(' · '), fmtMoney(m.monto), 'eliminado', [fmtDate(m.fecha), m.descripcion].filter(Boolean).join(' · ')); state.movimientos = state.movimientos.filter((x) => x.id !== m.id); commit(); toast('Movimiento eliminado'); }, 'Eliminar');
     $('#mOk', box).onclick = () => {
       const v = vals(box), monto = numIn(v.monto); if (monto <= 0) return toast('Poné el monto');
       const data = { tipo: v.tipo, fecha: v.fecha, categoria: v.categoria, descripcion: v.descripcion, monto, proveedorId: v.proveedorId, ...(v.local ? { local: v.local } : {}) };
-      if (isNew) state.movimientos.push({ id: uid(), creado: new Date().toISOString(), ...extra, ...data }); else Object.assign(m, data);
+      if (isNew) state.movimientos.push({ id: uid(), creado: new Date().toISOString(), ...extra, ...data });
+      else { if (r2(m.monto) !== r2(monto)) audit('Monto de un movimiento', [TIPOS_MOV[m.tipo].lbl, m.categoria, m.ticket].filter(Boolean).join(' · '), fmtMoney(m.monto), fmtMoney(monto), fmtDate(m.fecha)); Object.assign(m, data); }
       closeModal(); commit(); toast('Movimiento guardado ✔');
     };
   });
@@ -795,18 +739,27 @@ function evForm(e, fecha) {
 function evDone(id) {
   const e = state.eventos.find((x) => x.id === id); if (!e) return;
   const map = { pagar: 'gasto', prestamo_recibido: 'gasto', cobrar: 'ingreso', prestamo_dado: 'ingreso' };
-  const tipoMov = e.mov ? e.mov.tipo : e.venta ? 'ingreso' : map[e.tipo];
+  const tipoMov = e.mov ? e.mov.tipo : e.venta || e.ventas ? 'ingreso' : map[e.tipo];
   if (!tipoMov || !e.monto) { e.hecho = true; commit(); toast('Marcado como resuelto ✔'); return; }
   const lbl = tipoMov === 'ingreso' ? 'cobro' : tipoMov === 'inversion' ? 'inversión' : 'gasto';
-  openModal(`<h3>✔ Marcar como resuelto</h3><p><b>${esc(e.titulo)}</b> · ${fmtMoney(e.monto)}</p>
-  <p>¿Querés registrar también el ${lbl} de <b>${fmtMoney(e.monto)}</b> en tus movimientos de dinero?</p>
-  <label class="f">Fecha del ${lbl}<input type="date" id="dFecha" value="${todayStr()}"></label>
+  const parcial = !e.venta && !e.ventas; // se puede pagar o cobrar una parte y dejar el resto pendiente
+  openModal(`<h3>✔ Marcar como resuelto</h3><p><b>${esc(e.titulo)}</b> · ${fmtMoney(e.monto)}${e.pagado ? ` <span class="small muted">(ya se ${tipoMov === 'ingreso' ? 'cobraron' : 'pagaron'} ${fmtMoney(e.pagado)})</span>` : ''}</p>
+  <p>¿Querés registrar también el ${lbl} en tus movimientos de dinero?</p>
+  <div class="form"><label class="f">Fecha del ${lbl}<input type="date" id="dFecha" value="${todayStr()}"></label>
+  ${parcial ? `<label class="f">${tipoMov === 'ingreso' ? 'Cuánto te pagan ahora' : 'Cuánto pagás ahora'}<input id="dMonto" inputmode="decimal" value="${e.monto}"></label><p class="full small muted" style="margin:0">Si es solo una parte, el resto queda pendiente en el calendario.</p>` : ''}</div>
   <div class="modal-actions"><button id="dNo">Solo marcar resuelto</button><button class="pri" id="dSi">Sí, registrar ${lbl}</button></div>`, (box) => {
     $('#dNo', box).onclick = () => { e.hecho = true; closeModal(); commit(); };
     $('#dSi', box).onclick = () => {
-      const fecha = $('#dFecha', box).value || todayStr();
+      const fecha = $('#dFecha', box).value || todayStr(), ahora = new Date().toISOString();
+      if (e.ventas) { // venta fiada con varios productos: un cobro por renglón, con los precios y costos del día de la venta
+        e.ventas.forEach((f) => { const { fechaVenta, ...r } = f; state.movimientos.push({ id: uid(), creado: ahora, fecha, tipo: 'ingreso', categoria: 'Venta', descripcion: e.persona || 'Venta fiada cobrada', ...r }); });
+        e.hecho = true; closeModal(); commit(); return toast('Resuelto y cobro registrado ✔');
+      }
+      const pago = parcial ? Math.min(e.monto, numIn($('#dMonto', box).value)) : e.monto; if (!(pago > 0)) return toast('Poné el monto');
+      const resto = Math.round((e.monto - pago) * 100) / 100;
       const cat = e.venta ? 'Venta' : e.mov ? e.mov.categoria : tipoMov === 'ingreso' ? 'Cobro de deuda' : 'Pago de deuda';
-      state.movimientos.push({ id: uid(), creado: new Date().toISOString(), fecha, tipo: tipoMov, categoria: cat, descripcion: [e.titulo, e.persona].filter(Boolean).join(' · '), monto: e.monto, ...(e.venta ? { productoId: e.venta.productoId, cantidad: e.venta.cantidad, costoUnit: e.venta.costoUnit } : {}), ...(e.mov ? { proveedorId: e.mov.proveedorId, productoId: e.mov.productoId, cantidad: e.mov.cantidad } : {}), local: (e.venta || e.mov) && prod((e.venta || e.mov).productoId) ? localDe(prod((e.venta || e.mov).productoId)) : localActivo() });
+      state.movimientos.push({ id: uid(), creado: ahora, fecha, tipo: tipoMov, categoria: cat, descripcion: [e.titulo, e.persona, resto > 0 && 'pago parcial'].filter(Boolean).join(' · '), monto: pago, ...(e.venta ? { productoId: e.venta.productoId, cantidad: e.venta.cantidad, costoUnit: e.venta.costoUnit } : {}), ...(e.mov ? { proveedorId: e.mov.proveedorId, ...(resto > 0 || !e.mov.productoId ? {} : { productoId: e.mov.productoId, cantidad: e.mov.cantidad }) } : {}), ...(e.compraNro ? { compra: true, compraNro: e.compraNro } : {}), local: (e.venta || e.mov) && prod((e.venta || e.mov).productoId) ? localDe(prod((e.venta || e.mov).productoId)) : e.local || localActivo() });
+      if (resto > 0) { e.monto = resto; e.pagado = Math.round(((e.pagado || 0) + pago) * 100) / 100; closeModal(); commit(); return toast(`Anotado. Quedan ${fmtMoney(resto)} pendientes`); }
       e.hecho = true; closeModal(); commit(); toast(`Resuelto y ${lbl} registrado ✔`);
     };
   });
@@ -844,6 +797,7 @@ const ACTS = {
   prodView: (id) => prodView(id),
   venta: (id) => ventaForm(id),
   compra: (id) => compraForm(id),
+  compraProv: (id) => compraForm('', id),
   ajuste: (id) => ajusteForm(id),
   provNew: () => provForm(),
   provEdit: (id) => provForm(prov(id)),
@@ -859,7 +813,7 @@ const ACTS = {
   calSel: (d) => { ui.calSel = d; render(); },
   calMove: (k) => { ui.calMes = addMonths(ui.calMes + '-01', Number(k)).slice(0, 7); render(); },
   calHoy: () => { ui.calMes = todayStr().slice(0, 7); ui.calSel = todayStr(); render(); },
-  cfgSave: () => { state.config.negocio = $('#cfgNeg').value.trim() || 'Mi Negocio'; state.config.saludo = $('#cfgSaludo').value.trim(); state.config.moneda = $('#cfgMon').value.trim() || '$'; state.config.avisoDias = Math.max(0, Number($('#cfgDias').value) || 0); commit(); toast('Ajustes guardados ✔'); },
+  cfgSave: () => { state.config.negocio = $('#cfgNeg').value.trim() || 'Mi Negocio'; state.config.saludo = $('#cfgSaludo').value.trim(); try { localStorage.setItem('quien', $('#cfgQuien').value.trim()); } catch {} state.config.moneda = $('#cfgMon').value.trim() || '$'; state.config.avisoDias = Math.max(0, Number($('#cfgDias').value) || 0); commit(); toast('Ajustes guardados ✔'); },
   exportJson, importJson,
   lgGo: async () => {
     const mail = $('#lgMail').value.trim(), pass = $('#lgPass').value; if (!mail || !pass) return ($('#lgErr').textContent = 'Completá email y contraseña.');

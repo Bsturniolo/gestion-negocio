@@ -461,3 +461,33 @@ button.as-ini{border:2px solid var(--oliva,#506345);color:var(--oliva,#506345);f
   .as-acc-b button{flex:1;min-height:44px;justify-content:center}
 }
 .as-grid>label:last-child:nth-child(odd){grid-column:1/-1}
+
+/* Venta y compra con varios productos, ficha de stock, historial de cambios y cuenta del proveedor */
+.vt-cab,.vt-fila{display:grid;grid-template-columns:minmax(0,1.7fr) 84px 110px 100px 40px;gap:8px;align-items:center}
+.vt-cab{padding:0 2px 4px}
+.vt-fila{padding:6px 0;border-bottom:1px solid var(--line)}
+.vt-fila .vs{text-align:right;font-weight:700;white-space:nowrap}
+.vt-fila button{min-height:40px;justify-content:center;padding:0}
+#vFilas{margin-bottom:12px}
+table.kx td,table.kx th{white-space:nowrap}
+table.kx td:nth-child(2){white-space:normal;min-width:150px}
+.au-antes{text-decoration:line-through;color:var(--muted)}
+.au-cards .card{margin-bottom:10px}
+.cta-lista{display:grid;gap:8px}
+.cta-fila{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:#fff}
+.cta-fila .row{flex-shrink:0;flex-wrap:nowrap}
+a.comp,span.comp{font-weight:700;white-space:nowrap}
+a.comp{color:var(--acc,#b87332);text-decoration:none}
+.kx .f-c{display:none}
+@media (max-width:760px){
+  .vt-cab{display:none}
+  table.kx th,table.kx td{padding:8px 5px;font-size:12.5px;letter-spacing:0}
+  table.kx th:first-child,table.kx td:first-child{padding-left:10px}
+  table.kx td:nth-child(2){min-width:0}
+  .kx .f-l{display:none}.kx .f-c{display:inline}
+  .vt-fila{grid-template-columns:1fr 1fr 1fr 44px;padding:10px 0}
+  .vt-fila .vp{grid-column:1/-1}
+  .vt-fila button{min-height:44px}
+  .cta-fila{flex-direction:column;align-items:stretch}
+  .cta-fila .row{justify-content:space-between}
+}
